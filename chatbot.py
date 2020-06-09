@@ -114,7 +114,7 @@ def preprocess_targets(targets, word_to_int, batch_size):
     return tf.concat((left, right), 1)
 
 
-def encoder_rnn_layer(inputs, size, layers, keep_prob, seq_len):
+def encoder_rnn(inputs, size, layers, keep_prob, seq_len):
     lstm = tf.contrib.rnn.BasicLSTMCell(size)
     lstm_dropout = tf.contrib.rnn.DropoutWrapper(lstm, input_keep_prob=keep_prob)
     encoder_cell = tf.contrib.rnn.MultiRNNCell((lstm_dropout,) * layers)
