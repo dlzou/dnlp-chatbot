@@ -100,11 +100,11 @@ for length in range(1, max_q_len + 1):
 ############ BUILD MODEL ############
 
 def model_inputs():
-    data = tf.placeholder(tf.int32, shape=(None, None), name='data')
+    inputs = tf.placeholder(tf.int32, shape=(None, None), name='inputs')
     targets = tf.placeholder(tf.int32, shape=(None, None), name='targets')
     learn_rate = tf.placeholder(tf.float32, name='learn_rate')
     keep_prob = tf.placeholder(tf.float32, name='keep_prob')
-    return data, targets, learn_rate, keep_prob
+    return inputs, targets, learn_rate, keep_prob
 
 
 def preprocess_targets(targets, word_to_int, batch_size):
@@ -223,7 +223,7 @@ def seq2seq_model(inputs, targets, keep_prob, batch_size, seq_len, answers_num_w
                                                               initializer=tf.random_uniform_initializer(0, 1))
     encoder_state = encoder_rnn(encoder_embedded_input, rnn_size, num_layers, keep_prob, seq_len)
     preprocessed_targets = preprocess_targets(targets, word_to_int, batch_size)
-    decoder_embeddings_mtx = tf.Variable(tf.random_uniform((questions_num_words+1, dec_embedding_size), 0, 1))
+    decoder_embeddings_mtx = tf.Variable(tf.random_uniform((questions_num_words + 1, dec_embedding_size), 0, 1))
     decoder_embedded_input = tf.nn.embedding_lookup(decoder_embeddings_mtx, preprocessed_targets)
     train_predictions, test_predictions = decoder_rnn(decoder_embedded_input,
                                                       decoder_embeddings_mtx,
@@ -235,4 +235,52 @@ def seq2seq_model(inputs, targets, keep_prob, batch_size, seq_len, answers_num_w
                                                       keep_prob,
                                                       batch_size)
     return train_predictions, test_predictions
+
+
+# Set hyperparameters
+epochs = 100
+batch_size = 64
+rnn_size = 512
+num_layers = 3
+encoding_embedding_size = 512
+decoding_embedding_size = 512
+learn_rate = 0.01
+learn_rate_decay = 0.9
+min_learn_rate = 0.0001
+keep_prob = 0.5
+
+tf.reset_default_graph()
+sessoin = tf.InteractiveSession()
+inputs, targets, lr, kp = model_inputs()
+seq_len = tf.placeholder_with_default(25, None, name='seq_len')
+inputs_shape = tf.shape(inputs)
+
+train_predictions, test_predictions = seq2seq_model(tf.reverse(inputs, (-1,)),
+                                                    targets,
+                                                    batch_size,
+                                                    seq_len,
+                                                    len(word_to_int),
+                                                    len(word_to_int),
+                                                    encoding_embedding_size,
+                                                    decoding_embedding_size,
+                                                    rnn_size,
+                                                    num_layers,
+                                                    word_to_int)
+
+
+with tf.name_scope("optimization"):
+    loss_error = tf.contrib.seq2seq.sequence_loss(train_predictions,
+                                                  targets,
+                                                  tf.ones((inputs_shape[0], seq_len)))
+    optimizer = tf.train.AdamOptimizer(learn_rate)
+    gradients = optimizer.compute_gradients(loss_error)
+    clipped_gradients = [(tf.clip_by_value(grad_tsr, -5., 5.), grad_var)
+                         for grad_tsr, grad_var in gradients if grad_tsr is not None]
+    optimizer_grad_clipping = optimizer.apply_gradients(clipped_gradients)
+
+
+def apply_padding(seq_batch, word_to_int):
+    max_seq_len = max([len(s) for s in seq_batch])
+    pad_token = word_to_int['<PAD>']
+    return [s + [pad_token] * (max_seq_len - len(s)) for s in seq_batch]
 
