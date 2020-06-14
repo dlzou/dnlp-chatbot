@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 import time
 import utils
@@ -237,7 +236,10 @@ def seq2seq_model(inputs, targets, keep_prob, batch_size, seq_len, answers_num_w
     return train_predictions, test_predictions
 
 
-# Set hyperparameters
+############ TRAIN MODEL ############
+
+# Set parameters
+
 epochs = 100
 batch_size = 64
 rnn_size = 512
@@ -250,7 +252,7 @@ min_learn_rate = 0.0001
 keep_prob = 0.5
 
 tf.reset_default_graph()
-sessoin = tf.InteractiveSession()
+session = tf.InteractiveSession()
 inputs, targets, lr, kp = model_inputs()
 seq_len = tf.placeholder_with_default(25, None, name='seq_len')
 inputs_shape = tf.shape(inputs)
@@ -266,7 +268,6 @@ train_predictions, test_predictions = seq2seq_model(tf.reverse(inputs, (-1,)),
                                                     rnn_size,
                                                     num_layers,
                                                     word_to_int)
-
 
 with tf.name_scope("optimization"):
     loss_error = tf.contrib.seq2seq.sequence_loss(train_predictions,
@@ -284,3 +285,92 @@ def apply_padding(seq_batch, word_to_int):
     pad_token = word_to_int['<PAD>']
     return [s + [pad_token] * (max_seq_len - len(s)) for s in seq_batch]
 
+
+def split_batches(questions, answers, batch_size):
+    for i in range(len(questions) // batch_size):
+        start = i * batch_size
+        q_batch = questions[start : start + batch_size]
+        a_batch = answers[start : start + batch_size]
+        q_batch = apply_padding(q_batch, word_to_int)
+        a_batch = apply_padding(a_batch, word_to_int)
+        yield q_batch, a_batch
+
+
+train_validation_split = int(len(sorted_clean_q) * 0.15)
+train_questions = sorted_clean_q[train_validation_split:]
+train_answers = sorted_clean_a[train_validation_split:]
+validation_questions = sorted_clean_q[:train_validation_split]
+validation_answers = sorted_clean_a[:train_validation_split]
+
+index_train_loss = 100
+index_validation_loss = len(train_questions) // batch_size // 2
+total_train_loss_error = 0
+list_validation_loss_error = 0
+early_stop = 1000
+early_stop_counter = 0
+checkpoint = "chatbot_weights.ckpt"
+session.run(tf.global_variables_initializer())
+
+# Training
+for epoch in range(1, epochs + 1):
+    for batch_index, (padded_q, padded_a) in enumerate(split_batches(train_questions,
+                                                                     train_answers,
+                                                                     batch_size)):
+        start_time = time.time()
+        _, batch_loss_error = session.run((optimizer_grad_clipping, loss_error),
+                                          {inputs: padded_q,
+                                           targets: padded_a,
+                                           lr: learn_rate,
+                                           seq_len: padded_a.shape[1],
+                                           keep_prob: keep_prob})
+        total_train_loss_error += batch_loss_error
+        batch_time = time.time() - start_time
+        if batch_index % index_train_loss == 0:
+            print(('Epoch: {:>3}/{}, Batch: {:>4}/{}, Training Loss Error: {:>6.3f}, '
+                  + 'Training Time on 100 Batches: {:d} seconds').format(epoch, 
+                                                                         epochs, 
+                                                                         batch_index, 
+                                                                         len(train_questions) // batch_size,
+                                                                         total_train_loss_error / index_train_loss,
+                                                                         int(batch_time * index_train_loss)))
+            total_train_loss_error = 0
+
+        # Validation
+        if batch_index % index_validation_loss == 0 and batch_index > 0:
+            total_validation_loss_error = 0
+            start_time = time.time()
+            for batch_index, (padded_q, padded_a) in enumerate(split_batches(validation_questions,
+                                                                             validation_answers,
+                                                                             batch_size)):
+                start_time = time.time()
+                _, batch_loss_error = session.run((optimizer_grad_clipping, loss_error),
+                                                  {inputs: padded_q,
+                                                  targets: padded_a,
+                                                  lr: learn_rate,
+                                                  seq_len: padded_a.shape[1],
+                                                  keep_prob: 1})
+                total_train_loss_error += batch_loss_error
+            batch_time = time.time() - start_time
+            avg_validation_loss_error = total_validation_loss_error / (len(validation_questions) / batch_size)
+            print(('Validation Loss Error: {:>6.3f}, '
+                  + 'Batch Validation Time: {:d} seconds').format(avg_validation_loss_error, int(batch_time)))
+            
+            learn_rate *= learn_rate_decay
+            if learn_rate < min_learn_rate:
+                learn_rate = min_learn_rate
+            list_validation_loss_error.append(avg_validation_loss_error)
+            if avg_validation_loss_error <= min(list_validation_loss_error):
+                print('I improved!')
+                early_stop_counter = 0
+                saver = tf.train.Saver()
+                saver.save(session, checkpoint)
+            else:
+                print("I did not improve.")
+                early_stop_counter += 1
+                if early_stop_counter == early_stop:
+                    break
+
+    if early_stop_counter == early_stop:
+        print("Early stopped.")
+        break
+print('Finished training!')
