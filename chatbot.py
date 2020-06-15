@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 import time
 import utils
@@ -55,7 +56,7 @@ for line in clean_answers:
         else:
             word_counts[word] = 1
 
-min_count = 20
+min_count = 15
 word_to_int = {}
 word_id = 0
 for word, count in word_counts.items():
@@ -89,7 +90,7 @@ for line in clean_answers:
 # Sort questions by length
 sorted_clean_q = []
 sorted_clean_a = []
-for length in range(1, max_q_len + 1):
+for length in range(2, max_q_len + 1):
     for i, q in enumerate(questions_int):
         if len(q) == length:
             sorted_clean_q.append(questions_int[i])
@@ -241,12 +242,12 @@ def seq2seq_model(inputs, targets, keep_prob, batch_size, seq_len, answers_num_w
 # Set parameters
 
 epochs = 100
-batch_size = 64
+batch_size = 32
 rnn_size = 512
 num_layers = 3
 encoding_embedding_size = 512
 decoding_embedding_size = 512
-learn_rate = 0.01
+learn_rate = 0.001
 learn_rate_decay = 0.9
 min_learn_rate = 0.0001
 keep_prob = 0.5
@@ -306,7 +307,7 @@ index_train_loss = 100
 index_validation_loss = len(train_questions) // batch_size // 2
 total_train_loss_error = 0
 list_validation_loss_error = 0
-early_stop = 1000
+early_stop = 100
 early_stop_counter = 0
 checkpoint = "chatbot_weights.ckpt"
 session.run(tf.global_variables_initializer())
@@ -374,3 +375,40 @@ for epoch in range(1, epochs + 1):
         print("Early stopped.")
         break
 print('Finished training!')
+
+
+############ TESTING ############
+
+session = tf.InteractiveSession()
+session.run(tf.global_variable_initializer())
+saver = tf.train.Saver()
+saver.restore(session, checkpoint)
+
+
+def string_to_int(question, word_to_int):
+    question = utils.clean_text(question)
+    out_int = word_to_int['<OUT>']
+    return [word_to_int.get(w, out_int) for w in question.split()]
+
+while True:
+    question = input('>>> ')
+    if question.lower() == 'bye':
+        break
+    question = string_to_int(question, word_to_int) + [word_to_int['<PAD>']] * (20 - len(question))
+    fake_batch = np.zeros((batch_size, 20))
+    fake_batch[0] = question
+    predicted_answer = session.run(test_predictions,
+                                   {inputs: fake_batch,
+                                    keep_prob: 0.5})[0]
+    answer = ''
+    for i in np.argmax(predicted_answer, 1):
+        if word_to_int[i] == 'i':
+            token = 'I'
+        elif word_to_int == '<EOS>':
+            token = '.'
+        else:
+            token = ' ' + int_to_word[i]
+        answer += token
+        if token == '.':
+            break
+    print(answer)
