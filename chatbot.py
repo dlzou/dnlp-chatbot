@@ -390,6 +390,7 @@ def string_to_int(question, word_to_int):
     out_int = word_to_int['<OUT>']
     return [word_to_int.get(w, out_int) for w in question.split()]
 
+
 while True:
     question = input('>>> ')
     if question.lower() == 'bye':
