@@ -5,3 +5,5 @@ import time
 EPOCHS = 10
 BATCH_SIZE = 32
 tf.keras.preprocessing.text.Tokenizer
+
+# vocab_int = ['<PAD>', '<SOS>', '<EOS>', '<OUT>', ...]
