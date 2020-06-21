@@ -350,12 +350,12 @@ for epoch in range(1, epochs + 1):
                                                   lr: learn_rate,
                                                   seq_len: padded_a.shape[1],
                                                   keep_prob: 1})
-                total_train_loss_error += batch_loss_error
+                total_validation_loss_error += batch_loss_error
             batch_time = time.time() - start_time
             avg_validation_loss_error = total_validation_loss_error / (len(validation_questions) / batch_size)
-            print(('Validation Loss Error: {:>6.3f}, '
-                  + 'Batch Validation Time: {:d} seconds').format(avg_validation_loss_error, int(batch_time)))
-            
+            print('Validation Loss Error: {:>6.3f}, Batch Validation Time: {:d} seconds'
+                  .format(avg_validation_loss_error, int(batch_time)))
+
             learn_rate *= learn_rate_decay
             if learn_rate < min_learn_rate:
                 learn_rate = min_learn_rate

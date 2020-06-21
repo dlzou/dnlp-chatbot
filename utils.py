@@ -16,3 +16,7 @@ def clean_text(s):
     s = re.sub(r"can't", "cannot", s)
     s = re.sub(r"[^a-zA-Z0-9 ]+", "", s)
     return s
+
+
+def tokenize_seq(s):
+    pass
