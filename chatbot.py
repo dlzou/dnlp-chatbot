@@ -3,13 +3,20 @@ import tensorflow as tf
 import time
 import utils
 
+"""
+Code from the SuperDataScience course: "Deep Learning and NLP A-Z: How to Create a Chatbot"
+
+DISCLAIMER: this code has never been executed nor debugged, and it uses the outdated TensorFlow 1 
+API. See model.py and train.py for current work.
+"""
+
+
+############ PREPROCESS DATA #############
+
 with open('cmdc/movie_lines.txt', encoding='utf-8', errors='ignore') as f:
     lines = f.read().split('\n')
 with open('cmdc/movie_conversations.txt', encoding='utf-8', errors='ignore') as f:
     conversations = f.read().split('\n')
-
-
-############ PREPROCESS DATA #############
 
 # Extract file data
 id_to_line = {}
