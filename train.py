@@ -41,22 +41,55 @@ clean_answers = []
 for a in answers:
     clean_answers.append(utils.clean_text(a))
 
+# Count word occurrences, filter out uncommon words
+word_counts = {}
+for line in clean_questions:
+    for word in line.split():
+        if word in word_counts:
+            word_counts[word] += 1
+        else:
+            word_counts[word] = 1
+for line in clean_answers:
+    for word in line.split():
+        if word in word_counts:
+            word_counts[word] += 1
+        else:
+            word_counts[word] = 1
+
+# Create vocab to integer mapping
+MIN_WORD_COUNT = 15
 vocab_int = {
     '<PAD>': 0,
     '<SOS>': 1,
     '<EOS>': 2,
     '<EX>': 3
 }
+word_index = 4
+for word, count in word_counts.items():
+    if count >= MIN_WORD_COUNT:
+        vocab_int[word] = word_index
+        word_index += 1
 
-tf.keras.preprocessing.text.Tokenizer
+# Recreate questions and answers with integers
+inputs = []
+for line in clean_questions:
+    inputs.append([1] + [vocab_int.get(w, 3) for w in line.split()] + [2])
+targets = []
+for line in clean_answers:
+    targets.append([1] + [vocab_int.get(w, 3) for w in line.split()] + [2])
+
+
+############ TRAINING ############
 
 EPOCHS = 10
 BATCH_SIZE = 32
 
 
-for (batch_i, (batch_input, batch_target)) in enumerate():
-    pad_batch_inp = tf.keras.preprocessing.sequence.pad_sequences(batch_inp, padding='post')
-    pad_batch_targ = tf.keras.preprocessing.sequence.pad_sequences(batch_targ, padding='post')
-    break
+for epoch in range(EPOCHS):
+    start = time.time()
+    total_loss = 0
+    
+    for (batch_i, (batch_inputs, batch_targets)) in enumerate():
+        break
 
 # k-fold cross validation

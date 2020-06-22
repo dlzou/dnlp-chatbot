@@ -4,7 +4,7 @@ import tensorflow.keras.layers as layers
 
 class ChatbotModel:
     """ seq2seq model using GRU cells.
-    
+
     Format for hyperparameters:
     hparams = {
         'embedding_size': x,
@@ -13,7 +13,7 @@ class ChatbotModel:
         'keep_prob': x,
         'learn_rate': x
     }
-    
+
     Format for vocabulary:
     vocab_int = {
         '<PAD>': 0,
@@ -22,7 +22,7 @@ class ChatbotModel:
         '<EX>': 3,
         ...
     }
-    
+
     References:
     Tensorflow 2 tutorial: "Neural machine translation with attention"
     SuperDataScience course: "Deep Learning and NLP A-Z: How to Create a Chatbot"
@@ -57,20 +57,24 @@ class ChatbotModel:
         batch_inp and batch_targ should be zero-padded.
         """
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
+
+        batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
+        batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets, padding='post')
         batch_size = batch_inputs.shape[0]
         loss = 0
+
         with tf.GradientTape() as tape:
             hidden_state = tf.zeros((batch_size, self.encoder.units))
             enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
             dec_inputs = tf.expand_dims([self.vocab_int['<SOS>']] * batch_size, 1)
-            
-            # teacher forcing: feeding the target (instead of prediction) as the next input
+
+            # Teacher forcing: feeding the target (instead of prediction) as the next input
             for t in range(1, batch_targets.shape[1]):
                 predictions, _, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
                 targets = batch_targets[:, t]
                 loss += self._loss_fn(targets, predictions)
                 dec_inputs = tf.expand_dims(targets, 1)
-                
+
         batch_loss = loss / int(batch_targets.shape[1])
         variables = self.encoder.trainable_variables + self.decoder.trainable_variables
         gradients = tape.gradient(loss, variables)
@@ -83,6 +87,9 @@ class ChatbotModel:
         batch_inp and batch_targ should be zero-padded.
         """
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
+
+        batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
+        batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets, padding='post')
         batch_size = batch_inputs.shape[0]
         loss = 0
 
@@ -94,7 +101,7 @@ class ChatbotModel:
         for t in range(1, batch_targets.shape[1]):
             predictions, _, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
             loss += self._loss_fn(batch_targets[:, t], predictions)
-            predicted_ids = tf.argmax(predictions, axis=1).numpy() 
+            predicted_ids = tf.argmax(predictions, axis=1).numpy()
             dec_inputs = tf.expand_dims(predicted_ids, 1)
 
         batch_loss = loss / int(batch_targets.shape[1])
@@ -115,7 +122,7 @@ class ChatbotModel:
             if predicted_id == self.vocab_int['<EOS>']:
                 return output_seq
             dec_input = tf.expand_dims([predicted_id], 0)
-            
+
         return output_seq
 
 
@@ -154,7 +161,7 @@ class Encoder(tf.keras.Model):
 
 
     def call(self, inputs, state):
-        # inputs are in mini-batches
+        # Inputs are in mini-batches
         inputs = self.embedding(inputs)
         outputs, state = self.gru(inputs, initial_state=state)
         return outputs, state
@@ -162,7 +169,7 @@ class Encoder(tf.keras.Model):
 
 class Decoder(tf.keras.Model):
     """ Decoder portion of the seq2seq model. """
-    
+
     def __init__(self, vocab_size, embedding_dim, units, num_layers, dropout=0.):
         super(Decoder, self).__init__()
         self.units = units
@@ -190,13 +197,13 @@ class Decoder(tf.keras.Model):
         outputs = tf.reshape(outputs, (-1, outputs.shape[2]))
         predictions = self.predictor(outputs)
         # predictions.shape == (batch_size, vocab_size)
-        
+
         return predictions, state
 
 
 class BahdanauAttention(layers.Layer):
     """ Implementation of the Bahdanau attention mechanism.
-    
+
     An instance is maintained by the decoder.
     """
 
