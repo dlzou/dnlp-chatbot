@@ -1,4 +1,4 @@
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 import numpy as np
 import time
 import utils
@@ -78,17 +78,31 @@ targets = []
 for line in clean_answers:
     targets.append([1] + [vocab_int.get(w, 3) for w in line.split()] + [2])
 
+train_inputs, test_inputs, train_targets, test_targets = train_test_split(inputs,
+                                                                          targets,
+                                                                          test_size=0.2)
 
 ############ TRAINING ############
 
 EPOCHS = 10
 BATCH_SIZE = 32
+hparams = {
+    'embedding_dim': 256,
+    'units': 512,
+    'n_layers': 3,
+    'dropout': 0.1,
+    'learn_rate': 0.001
+}
+
+def get_batch(inputs, targets, batch_size):
+    pass
 
 
+print("Starting training")
 for epoch in range(EPOCHS):
     start = time.time()
     total_loss = 0
-    
+
     for (batch_i, (batch_inputs, batch_targets)) in enumerate():
         break
 

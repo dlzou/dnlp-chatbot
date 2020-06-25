@@ -1,16 +1,17 @@
 import tensorflow as tf
 import tensorflow.keras.layers as layers
 
+# beam search?
 
 class ChatbotModel:
     """ seq2seq model using GRU cells.
 
     Format for hyperparameters:
     hparams = {
-        'embedding_size': x,
+        'embedding_dim': x,
         'units': x,
-        'num_layers': x,
-        'keep_prob': x,
+        'n_layers': x,
+        'dropout': x,
         'learn_rate': x
     }
 
@@ -33,14 +34,14 @@ class ChatbotModel:
         super(ChatbotModel, self).__init__()
         self.hparams = hparams
         self.encoder = Encoder(len(vocab_int),
-                               hparams['embedding_size'],
+                               hparams['embedding_dim'],
                                hparams['units'],
-                               hparams['num_layers'],
-                               dropout=hparams['keep_prob'])
+                               hparams['n_layers'],
+                               dropout=hparams['dropout'])
         self.decoder = Decoder(len(vocab_int),
-                               hparams['embedding_size'],
+                               hparams['embedding_dim'],
                                hparams['units'],
-                               hparams['num_layers'],
+                               hparams['n_layers'],
                                dropout=hparams['dropout'])
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=hparams['learn_rate'])
         self.vocab_int = vocab_int
@@ -146,7 +147,7 @@ class ChatbotModel:
 class Encoder(tf.keras.Model):
     """ Encoder portion of the seq2seq model. """
 
-    def __init__(self, vocab_size, embedding_dim, units, num_layers, dropout=0.):
+    def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
         super(Encoder, self).__init__()
         self.units = units
         self.embedding_dim = embedding_dim
@@ -154,7 +155,7 @@ class Encoder(tf.keras.Model):
         gru_cells = [layers.GRUCell(units,
                                     recurrent_initializer='glorot_uniform',
                                     dropout=dropout)
-                     for _ in range(num_layers)]
+                     for _ in range(n_layers)]
         self.gru = layers.Bidirectional(layers.RNN(gru_cells,
                                                    return_sequences=True,
                                                    return_state=True))
@@ -170,7 +171,7 @@ class Encoder(tf.keras.Model):
 class Decoder(tf.keras.Model):
     """ Decoder portion of the seq2seq model. """
 
-    def __init__(self, vocab_size, embedding_dim, units, num_layers, dropout=0.):
+    def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
         super(Decoder, self).__init__()
         self.units = units
         self.embedding_dim = embedding_dim
@@ -179,7 +180,7 @@ class Decoder(tf.keras.Model):
         gru_cells = [layers.GRUCell(units,
                                     recurrent_initializer='glorot_uniform',
                                     dropout=dropout)
-                     for _ in range(num_layers)]
+                     for _ in range(n_layers)]
         self.gru = layers.Bidirectional(layers.RNN(gru_cells,
                                                    return_sequences=True,
                                                    return_state=True))
