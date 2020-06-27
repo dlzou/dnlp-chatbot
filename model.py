@@ -1,6 +1,5 @@
 import tensorflow as tf
 import tensorflow.keras.layers as layers
-import sys
 
 # beam search?
 
@@ -69,9 +68,9 @@ class ChatbotModel:
             enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
             dec_inputs = tf.expand_dims([self.vocab_int['<SOS>']] * batch_size, 1)
 
-            # Teacher forcing: feeding the target (instead of prediction) as the next input
+            # teacher forcing: feeding the target (instead of prediction) as the next input
             for t in range(1, batch_targets.shape[1]):
-                predictions, _, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
+                predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
                 targets = batch_targets[:, t]
                 loss += self._loss_fn(targets, predictions)
                 dec_inputs = tf.expand_dims(targets, 1)
@@ -95,12 +94,12 @@ class ChatbotModel:
 
         hidden_state = self.encoder.get_init_state(batch_size)
         enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
-        
+
         dec_inputs = tf.expand_dims(
             [self.vocab_int['<SOS>']] * batch_size, 1)
 
         for t in range(1, batch_targets.shape[1]):
-            predictions, _, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
+            predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
             loss += self._loss_fn(batch_targets[:, t], predictions)
             predicted_ids = tf.argmax(predictions, axis=1).numpy()
             dec_inputs = tf.expand_dims(predicted_ids, 1)
@@ -163,16 +162,20 @@ class Encoder(tf.keras.Model):
 
 
     def call(self, inputs, state):
-        # Inputs are in mini-batches
+        # inputs are in mini-batches
         inputs = self.embedding(inputs)
-        # outputs, state = self.gru(inputs, initial_state=state)
-        asdf = self.gru(inputs, initial_state=state)
-        print(len(asdf))
-        sys.exit(0)
-        # return outputs, state
+        output_tuple = self.gru(inputs, initial_state=state)
+
+        # not sure, pls improve docs google
+        outputs = output_tuple[0]
+        forward_state = output_tuple[len(output_tuple) // 2]
+        backward_state = output_tuple[-1]
+
+        return outputs, tf.concat([forward_state, backward_state], axis=-1)
 
 
     def get_init_state(self, batch_size):
+        # doubled because bidirectional
         return [tf.zeros((batch_size, self.units)) for i in range(2 * self.n_layers)]
 
 
@@ -203,12 +206,16 @@ class Decoder(tf.keras.Model):
         inputs = tf.concat([tf.expand_dims(context_vec, 1), inputs], axis=-1)
         # x.shape == (batch_size, 1, embedding_dim + state_size)
 
-        outputs, state = self.gru(inputs)
+        output_tuple = self.gru(inputs)
+        outputs = output_tuple[0]
+        forward_state = output_tuple[len(output_tuple) // 2]
+        backward_state = output_tuple[-1]
+        
         outputs = tf.reshape(outputs, (-1, outputs.shape[2]))
         predictions = self.predictor(outputs)
         # predictions.shape == (batch_size, vocab_size)
 
-        return predictions, state
+        return predictions, tf.concat([forward_state, backward_state], axis=-1)
 
 
 class BahdanauAttention(layers.Layer):

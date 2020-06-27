@@ -94,15 +94,15 @@ def gen_batch_indices(indices, batch_size):
 
 
 MAX_EPOCHS = 20
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 hparams = {
     'embedding_dim': 256,
-    'units': 512,
-    'n_layers': 4,
+    'units': 256,
+    'n_layers': 2,
     'dropout': 0.1,
     'learn_rate': 0.001
 }
-REPORT_FREQ = 100 # batches between each printed report
+REPORT_FREQ = 10 # batches between each printed report
 
 chatbot = model.ChatbotModel(hparams, vocab_int, 'checkpoint.ckpt')
 print("Starting training")
@@ -122,7 +122,7 @@ for tr, val in cross_val.split(train_inputs, train_targets):
             batch_targets = [train_targets[i] for i in batch_indices]
             total_train_loss += chatbot.train_batch(batch_inputs, batch_targets)
 
-            if batch_i % REPORT_FREQ == 0:
+            if (batch_i + 1) % REPORT_FREQ == 0:
                 print('Epoch {}, batch {} loss: {:.4f}'.format(epoch + 1, 
                                                                batch_i + 1, 
                                                                total_train_loss))
