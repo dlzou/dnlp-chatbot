@@ -1,6 +1,8 @@
 from sklearn.model_selection import train_test_split, KFold
+import matplotlib.pyplot as plt
 import numpy as np
 import time
+import model
 import utils
 
 
@@ -80,30 +82,63 @@ for line in clean_answers:
 
 train_inputs, test_inputs, train_targets, test_targets = train_test_split(inputs,
                                                                           targets,
-                                                                          test_size=0.2)
+                                                                          test_size=0.5,
+                                                                          shuffle=True)
 
 ############ TRAINING ############
 
-EPOCHS = 10
-BATCH_SIZE = 32
+def gen_batch_indices(indices, batch_size):
+    for i in range(len(indices) // batch_size + 1):
+        start = i * batch_size
+        yield indices[start : start + batch_size]
+
+
+MAX_EPOCHS = 20
+BATCH_SIZE = 64
 hparams = {
     'embedding_dim': 256,
     'units': 512,
-    'n_layers': 3,
+    'n_layers': 4,
     'dropout': 0.1,
     'learn_rate': 0.001
 }
+REPORT_FREQ = 100 # batches between each printed report
 
-def get_batch(inputs, targets, batch_size):
-    pass
-
-
+chatbot = model.ChatbotModel(hparams, vocab_int, 'checkpoint.ckpt')
 print("Starting training")
-for epoch in range(EPOCHS):
-    start = time.time()
-    total_loss = 0
 
-    for (batch_i, (batch_inputs, batch_targets)) in enumerate():
-        break
+cross_val = KFold(n_splits=10)
+for tr, val in cross_val.split(train_inputs, train_targets):
+    start_fold = time.time()
+    fold_validation_loss = []
 
-# k-fold cross validation
+    for epoch in range(MAX_EPOCHS):
+        start_epoch = time.time()
+
+        train_gen = gen_batch_indices(tr, BATCH_SIZE)
+        total_train_loss = 0
+        for (batch_i, batch_indices) in enumerate(train_gen):
+            batch_inputs = [train_inputs[i] for i in batch_indices]
+            batch_targets = [train_targets[i] for i in batch_indices]
+            total_train_loss += chatbot.train_batch(batch_inputs, batch_targets)
+
+            if batch_i % REPORT_FREQ == 0:
+                print('Epoch {}, batch {} loss: {:.4f}'.format(epoch + 1, 
+                                                               batch_i + 1, 
+                                                               total_train_loss))
+                total_train_loss = 0
+
+        validation_gen = gen_batch_indices(val, BATCH_SIZE)
+        for (batch_i, batch_indices) in enumerate(validation_gen):
+            batch_inputs = [train_inputs[i] for i in batch_indices]
+            batch_targets = [train_targets[i] for i in batch_indices]
+            fold_validation_loss.append(chatbot.test_batch(batch_inputs, batch_targets))
+
+        print('Epoch {} time: {} sec\n'.format(epoch + 1,
+                                               time.time() - start_epoch))
+        if epoch % 2 == 0:
+            chatbot.save()
+
+    print('Fold time: {}'.format(time.time() - start_fold))
+    print(fold_validation_loss)
+    break # bamboozled, not actually performing k-fold cv

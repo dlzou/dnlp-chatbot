@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras.layers as layers
+import sys
 
 # beam search?
 
@@ -54,9 +55,8 @@ class ChatbotModel:
 
 
     def train_batch(self, batch_inputs, batch_targets):
-        """ Used for mini-batch training.
-        batch_inp and batch_targ should be zero-padded.
-        """
+        """ Used for mini-batch training."""
+
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
 
         batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
@@ -65,7 +65,7 @@ class ChatbotModel:
         loss = 0
 
         with tf.GradientTape() as tape:
-            hidden_state = tf.zeros((batch_size, self.encoder.units))
+            hidden_state = self.encoder.get_init_state(batch_size)
             enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
             dec_inputs = tf.expand_dims([self.vocab_int['<SOS>']] * batch_size, 1)
 
@@ -83,10 +83,9 @@ class ChatbotModel:
         return batch_loss
 
 
-    def validate_batch(self, batch_inputs, batch_targets):
-        """ Validation during the training cycle. Loss is not backproped.
-        batch_inp and batch_targ should be zero-padded.
-        """
+    def test_batch(self, batch_inputs, batch_targets):
+        """ Similar to train_batch, but no gradient descent."""
+
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
 
         batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
@@ -94,8 +93,9 @@ class ChatbotModel:
         batch_size = batch_inputs.shape[0]
         loss = 0
 
-        hidden_state = tf.zeros((batch_size, self.encoder.units))
+        hidden_state = self.encoder.get_init_state(batch_size)
         enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
+        
         dec_inputs = tf.expand_dims(
             [self.vocab_int['<SOS>']] * batch_size, 1)
 
@@ -150,6 +150,7 @@ class Encoder(tf.keras.Model):
     def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
         super(Encoder, self).__init__()
         self.units = units
+        self.n_layers = n_layers
         self.embedding_dim = embedding_dim
         self.embedding = layers.Embedding(vocab_size, embedding_dim, mask_zero=True)
         gru_cells = [layers.GRUCell(units,
@@ -164,8 +165,15 @@ class Encoder(tf.keras.Model):
     def call(self, inputs, state):
         # Inputs are in mini-batches
         inputs = self.embedding(inputs)
-        outputs, state = self.gru(inputs, initial_state=state)
-        return outputs, state
+        # outputs, state = self.gru(inputs, initial_state=state)
+        asdf = self.gru(inputs, initial_state=state)
+        print(len(asdf))
+        sys.exit(0)
+        # return outputs, state
+
+
+    def get_init_state(self, batch_size):
+        return [tf.zeros((batch_size, self.units)) for i in range(2 * self.n_layers)]
 
 
 class Decoder(tf.keras.Model):
@@ -174,6 +182,7 @@ class Decoder(tf.keras.Model):
     def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
         super(Decoder, self).__init__()
         self.units = units
+        self.n_layers = n_layers
         self.embedding_dim = embedding_dim
         self.embedding = layers.Embedding(vocab_size, embedding_dim)
         self.attention = BahdanauAttention(units)
