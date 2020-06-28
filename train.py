@@ -1,4 +1,5 @@
 from sklearn.model_selection import train_test_split, KFold
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -80,21 +81,21 @@ targets = []
 for line in clean_answers:
     targets.append([1] + [vocab_int.get(w, 3) for w in line.split()] + [2])
 
+# For testing purposes
+inputs, targets = inputs[:5000], targets[:5000]
+
 train_inputs, test_inputs, train_targets, test_targets = train_test_split(inputs,
                                                                           targets,
-                                                                          test_size=0.5,
+                                                                          test_size=0.2,
                                                                           shuffle=True)
+
 
 ############ TRAINING ############
 
-def gen_batch_indices(indices, batch_size):
-    for i in range(len(indices) // batch_size + 1):
-        start = i * batch_size
-        yield indices[start : start + batch_size]
-
-
 MAX_EPOCHS = 20
 BATCH_SIZE = 32
+LEARN_RATE = 0.001
+REPORT_FREQ = 10  # batches between each printed report
 hparams = {
     'embedding_dim': 256,
     'units': 256,
@@ -102,37 +103,71 @@ hparams = {
     'dropout': 0.1,
     'learn_rate': 0.001
 }
-REPORT_FREQ = 10 # batches between each printed report
-
 chatbot = model.ChatbotModel(hparams, vocab_int, 'checkpoint.ckpt')
+optimizer = tf.optimizers.Adam(learning_rate=LEARN_RATE, clipnorm=1.)
+
+
+def gen_batch_indices(indices, batch_size):
+    for i in range(len(indices) // batch_size + 1):
+        start = i * batch_size
+        yield indices[start: start + batch_size]
+
+
+@tf.function # not working
+def train_batch(batch_inputs, batch_targets):
+    with tf.GradientTape() as tape:
+        _, grad_loss = chatbot(batch_inputs, batch_targets, train=True)
+        train_vars = chatbot.get_variables()
+        gradients = tape.gradient(grad_loss, train_vars)
+        optimizer.apply_gradients(zip(gradients, train_vars))
+    return grad_loss / int(batch_targets.shape[1])
+
+
+@tf.function # not working
+def test_batch(batch_inputs, batch_targets):
+    _, grad_loss = chatbot(batch_inputs, batch_targets)
+    return grad_loss / int(batch_targets.shape[1])
+
+
 print("Starting training")
 
 cross_val = KFold(n_splits=10)
 for tr, val in cross_val.split(train_inputs, train_targets):
-    start_fold = time.time()
     fold_validation_loss = []
+    start_fold = time.time()
 
     for epoch in range(MAX_EPOCHS):
-        start_epoch = time.time()
-
         train_gen = gen_batch_indices(tr, BATCH_SIZE)
         total_train_loss = 0
+        start_epoch = time.time()
+
         for (batch_i, batch_indices) in enumerate(train_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
-            total_train_loss += chatbot.train_batch(batch_inputs, batch_targets)
+            # total_train_loss += chatbot.train_batch(batch_inputs, batch_targets)
+            batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
+                                                                         padding='post')
+            batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets,
+                                                                          padding='post')
+            total_train_loss += train_batch(batch_inputs, batch_targets)
 
             if (batch_i + 1) % REPORT_FREQ == 0:
-                print('Epoch {}, batch {} loss: {:.4f}'.format(epoch + 1, 
-                                                               batch_i + 1, 
-                                                               total_train_loss))
+                print('Epoch {}, batch {}-{} loss: {:.4f}'.format(epoch + 1,
+                                                                  batch_i - REPORT_FREQ + 1,
+                                                                  batch_i + 1,
+                                                                  total_train_loss))
                 total_train_loss = 0
 
         validation_gen = gen_batch_indices(val, BATCH_SIZE)
         for (batch_i, batch_indices) in enumerate(validation_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
-            fold_validation_loss.append(chatbot.test_batch(batch_inputs, batch_targets))
+            # fold_validation_loss.append(chatbot.test_batch(batch_inputs, batch_targets))
+            batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
+                                                                         padding='post')
+            batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets,
+                                                                          padding='post')
+            fold_validation_loss.append(test_batch(batch_inputs, batch_targets))
 
         print('Epoch {} time: {} sec\n'.format(epoch + 1,
                                                time.time() - start_epoch))
@@ -141,4 +176,4 @@ for tr, val in cross_val.split(train_inputs, train_targets):
 
     print('Fold time: {}'.format(time.time() - start_fold))
     print(fold_validation_loss)
-    break # bamboozled, not actually performing k-fold cv
+    break # bamboozled, stopping at one fold because I'm impatient

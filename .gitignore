@@ -138,4 +138,7 @@ dmypy.json
 # Ignore all local history of files
 .history
 
+# TensorFlow checkpoints
+checkpoint*
+
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,python

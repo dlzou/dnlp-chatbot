@@ -4,7 +4,7 @@ import tensorflow.keras.layers as layers
 # beam search?
 
 class ChatbotModel:
-    """ seq2seq model using GRU cells.
+    """seq2seq model using GRU cells.
 
     Format for hyperparameters:
     hparams = {
@@ -51,11 +51,54 @@ class ChatbotModel:
         self.checkpoint = tf.train.Checkpoint(encoder=self.encoder,
                                               decoder=self.decoder,
                                               optimizer=self.optimizer)
+        
+        
+    def __call__(self, batch_inputs, batch_targets, train=False):
+        """Call interface to replace train_batch and test_batch.
+        batch_inputs and batch_targets are zero-padded arrays.
+        """
+        assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
+        
+        batch_size = len(batch_inputs)
+        hidden_state = self.encoder.get_init_state(batch_size)
+        enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
+        dec_inputs = tf.fill([batch_size, 1], self.vocab_int['<SOS>'])
+        predicted_outputs = tf.fill([batch_size, 1], self.vocab_int['<SOS>'])
+        grad_loss = 0
+
+        if train:
+            # teacher forcing: feeding the target (instead of prediction) as the next input
+            for t in range(1, batch_targets.shape[1]):
+                predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
+                targets = batch_targets[:, t]
+                grad_loss += self.loss_fn(targets, predictions)
+
+                predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
+                predicted_ids = tf.expand_dims(predicted_ids, 1)
+                predicted_outputs = tf.concat([predicted_outputs, predicted_ids], axis=-1)
+                dec_inputs = tf.expand_dims(targets, 1)
+        else:
+            for t in range(1, batch_targets.shape[1]):
+                predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
+                grad_loss += self.loss_fn(batch_targets[:, t], predictions)
+
+                predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
+                predicted_ids = tf.expand_dims(predicted_ids, 1)
+                predicted_outputs = tf.concat([predicted_outputs, predicted_ids], axis=-1)
+                dec_inputs = predicted_ids
+        # batch_loss = grad_loss / int(batch_targets.shape[1])
+        return predicted_outputs, grad_loss
+
+
+    def get_variables(self):
+        """Collect all trainable variables in the model."""
+        return self.encoder.trainable_variables + self.decoder.trainable_variables
 
 
     def train_batch(self, batch_inputs, batch_targets):
-        """ Used for mini-batch training."""
-
+        """Used for mini-batch training.
+        Kept for reference; use call interfance instead.
+        """
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
 
         batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
@@ -72,7 +115,7 @@ class ChatbotModel:
             for t in range(1, batch_targets.shape[1]):
                 predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
                 targets = batch_targets[:, t]
-                loss += self._loss_fn(targets, predictions)
+                loss += self.loss_fn(targets, predictions)
                 dec_inputs = tf.expand_dims(targets, 1)
 
         batch_loss = loss / int(batch_targets.shape[1])
@@ -83,8 +126,9 @@ class ChatbotModel:
 
 
     def test_batch(self, batch_inputs, batch_targets):
-        """ Similar to train_batch, but no gradient descent."""
-
+        """Similar to train_batch, but no gradient descent.
+        Kept for reference; use call interfance instead.
+        """
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
 
         batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
@@ -94,13 +138,11 @@ class ChatbotModel:
 
         hidden_state = self.encoder.get_init_state(batch_size)
         enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
-
-        dec_inputs = tf.expand_dims(
-            [self.vocab_int['<SOS>']] * batch_size, 1)
+        dec_inputs = tf.expand_dims([self.vocab_int['<SOS>']] * batch_size, 1)
 
         for t in range(1, batch_targets.shape[1]):
             predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
-            loss += self._loss_fn(batch_targets[:, t], predictions)
+            loss += self.loss_fn(batch_targets[:, t], predictions)
             predicted_ids = tf.argmax(predictions, axis=1).numpy()
             dec_inputs = tf.expand_dims(predicted_ids, 1)
 
@@ -116,7 +158,7 @@ class ChatbotModel:
         output_seq = []
 
         for t in range(max_output_len):
-            predictions, hidden_state, attn_weights = self.decoder(dec_input, hidden_state, enc_output)
+            predictions, hidden_state = self.decoder(dec_input, hidden_state, enc_output)
             predicted_id = tf.argmax(predictions[0]).numpy()
             output_seq.append(predicted_id)
             if predicted_id == self.vocab_int['<EOS>']:
@@ -135,7 +177,7 @@ class ChatbotModel:
         status.assert_comsumed()
 
 
-    def _loss_fn(self, targets, predictions):
+    def loss_fn(self, targets, predictions):
         loss = self.loss_obj(targets, predictions)
         mask = tf.math.logical_not(tf.math.equal(targets, 0))
         mask = tf.cast(mask, dtype=loss.dtype)
@@ -144,7 +186,7 @@ class ChatbotModel:
 
 
 class Encoder(tf.keras.Model):
-    """ Encoder portion of the seq2seq model. """
+    """Encoder portion of the seq2seq model."""
 
     def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
         super(Encoder, self).__init__()
@@ -180,7 +222,7 @@ class Encoder(tf.keras.Model):
 
 
 class Decoder(tf.keras.Model):
-    """ Decoder portion of the seq2seq model. """
+    """Decoder portion of the seq2seq model."""
 
     def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
         super(Decoder, self).__init__()
@@ -219,7 +261,7 @@ class Decoder(tf.keras.Model):
 
 
 class BahdanauAttention(layers.Layer):
-    """ Implementation of the Bahdanau attention mechanism.
+    """Implementation of the Bahdanau attention mechanism.
 
     An instance is maintained by the decoder.
     """
