@@ -1,7 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras.layers as layers
 
-# beam search?
 
 class ChatbotModel:
     """seq2seq model using GRU cells.
@@ -43,7 +42,7 @@ class ChatbotModel:
                                hparams['units'],
                                hparams['n_layers'],
                                dropout=hparams['dropout'])
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=hparams['learn_rate'])
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=hparams['learn_rate']) # unused
         self.vocab_int = vocab_int
         self.save_path = save_path
         self.loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True,
@@ -51,14 +50,14 @@ class ChatbotModel:
         self.checkpoint = tf.train.Checkpoint(encoder=self.encoder,
                                               decoder=self.decoder,
                                               optimizer=self.optimizer)
-        
-        
+
+
     def __call__(self, batch_inputs, batch_targets, train=False):
         """Call interface to replace train_batch and test_batch.
         batch_inputs and batch_targets are zero-padded arrays.
         """
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
-        
+
         batch_size = len(batch_inputs)
         hidden_state = self.encoder.get_init_state(batch_size)
         enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
@@ -86,6 +85,7 @@ class ChatbotModel:
                 predicted_ids = tf.expand_dims(predicted_ids, 1)
                 predicted_outputs = tf.concat([predicted_outputs, predicted_ids], axis=-1)
                 dec_inputs = predicted_ids
+
         # batch_loss = grad_loss / int(batch_targets.shape[1])
         return predicted_outputs, grad_loss
 
@@ -97,7 +97,7 @@ class ChatbotModel:
 
     def train_batch(self, batch_inputs, batch_targets):
         """Used for mini-batch training.
-        Kept for reference; use call interfance instead.
+        Kept for reference; use call interface instead.
         """
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
 
@@ -127,7 +127,7 @@ class ChatbotModel:
 
     def test_batch(self, batch_inputs, batch_targets):
         """Similar to train_batch, but no gradient descent.
-        Kept for reference; use call interfance instead.
+        Kept for reference; use call interface instead.
         """
         assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
 
@@ -211,9 +211,9 @@ class Encoder(tf.keras.Model):
         # not sure, pls improve docs google
         outputs = output_tuple[0]
         forward_state = output_tuple[len(output_tuple) // 2]
-        backward_state = output_tuple[-1]
+        reverse_state = output_tuple[-1]
 
-        return outputs, tf.concat([forward_state, backward_state], axis=-1)
+        return outputs, tf.concat([forward_state, reverse_state], axis=-1)
 
 
     def get_init_state(self, batch_size):
@@ -251,13 +251,13 @@ class Decoder(tf.keras.Model):
         output_tuple = self.gru(inputs)
         outputs = output_tuple[0]
         forward_state = output_tuple[len(output_tuple) // 2]
-        backward_state = output_tuple[-1]
-        
+        reverse_state = output_tuple[-1]
+
         outputs = tf.reshape(outputs, (-1, outputs.shape[2]))
         predictions = self.predictor(outputs)
         # predictions.shape == (batch_size, vocab_size)
 
-        return predictions, tf.concat([forward_state, backward_state], axis=-1)
+        return predictions, tf.concat([forward_state, reverse_state], axis=-1)
 
 
 class BahdanauAttention(layers.Layer):
