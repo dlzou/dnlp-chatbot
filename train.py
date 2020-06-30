@@ -113,17 +113,17 @@ def gen_batch_indices(indices, batch_size):
         yield indices[start: start + batch_size]
 
 
-@tf.function # not working
+# @tf.function # not working
 def train_batch(batch_inputs, batch_targets):
     with tf.GradientTape() as tape:
         _, grad_loss = chatbot(batch_inputs, batch_targets, train=True)
-        train_vars = chatbot.get_variables()
+        train_vars = chatbot.trainable_variables
         gradients = tape.gradient(grad_loss, train_vars)
         optimizer.apply_gradients(zip(gradients, train_vars))
     return grad_loss / int(batch_targets.shape[1])
 
 
-@tf.function # not working
+# @tf.function # not working
 def test_batch(batch_inputs, batch_targets):
     _, grad_loss = chatbot(batch_inputs, batch_targets)
     return grad_loss / int(batch_targets.shape[1])
@@ -144,7 +144,6 @@ for tr, val in cross_val.split(train_inputs, train_targets):
         for (batch_i, batch_indices) in enumerate(train_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
-            # total_train_loss += chatbot.train_batch(batch_inputs, batch_targets)
             batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
                                                                          padding='post')
             batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets,
@@ -162,7 +161,6 @@ for tr, val in cross_val.split(train_inputs, train_targets):
         for (batch_i, batch_indices) in enumerate(validation_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
-            # fold_validation_loss.append(chatbot.test_batch(batch_inputs, batch_targets))
             batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
                                                                          padding='post')
             batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets,

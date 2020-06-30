@@ -16,3 +16,22 @@ def clean_text(s):
     s = re.sub(r"can't", "cannot", s)
     s = re.sub(r"[^a-zA-Z0-9 ]+", "", s)
     return s
+
+
+def load_train_data(file_path):
+    with open(file_path) as f:
+        inputs, targets = [], []
+        for pair in f.read().split('\n'):
+            inp, targ = pair.split(',')
+            inputs.append(inp.split(' '))
+            targets.append(targ.split(' '))
+    return inputs, targets
+
+
+def load_vocab_int(file_path):
+    with open(file_path) as f:
+        vocab = f.read().split('\n')
+        vocab_int = {}
+        for i, v in enumerate(vocab):
+            vocab_int[v] = i
+    return vocab_int

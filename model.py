@@ -2,7 +2,7 @@ import tensorflow as tf
 import tensorflow.keras.layers as layers
 
 
-class ChatbotModel:
+class ChatbotModel(tf.Module):
     """seq2seq model using GRU cells.
 
     Format for hyperparameters:
@@ -29,8 +29,8 @@ class ChatbotModel:
     Lilian Weng's blog: "Attention? Attention!"
     """
 
-    def __init__(self, hparams, vocab_int, save_path):
-        super(ChatbotModel, self).__init__()
+    def __init__(self, hparams, vocab_int, save_path, name=None):
+        super(ChatbotModel, self).__init__(name=name)
         self.hparams = hparams
         self.encoder = Encoder(len(vocab_int),
                                hparams['embedding_dim'],
@@ -90,11 +90,6 @@ class ChatbotModel:
         return predicted_outputs, grad_loss
 
 
-    def get_variables(self):
-        """Collect all trainable variables in the model."""
-        return self.encoder.trainable_variables + self.decoder.trainable_variables
-
-
     def train_batch(self, batch_inputs, batch_targets):
         """Used for mini-batch training.
         Kept for reference; use call interface instead.
@@ -152,7 +147,7 @@ class ChatbotModel:
 
     def evaluate(self, input_seq, max_output_len):
         input_seq = tf.convert_to_tensor(input_seq)
-        hidden_state = [tf.zeros((1, self.encoder.units))]
+        hidden_state = self.encoder.get_init_state(1)
         enc_output, hidden_state = self.encoder(input_seq, hidden_state)
         dec_input = tf.expand_dims([self.vocab_int['<SOS>']], 0)
         output_seq = []
@@ -270,7 +265,7 @@ class BahdanauAttention(layers.Layer):
         super(BahdanauAttention, self).__init__()
         self.hidden = layers.Dense(units)
         self.context = layers.Dense(units)
-        self.score = tf.keras.layers.Dense(1)
+        self.scoring = layers.Dense(1)
 
 
     def call(self, hidden, enc_outputs):
@@ -278,7 +273,7 @@ class BahdanauAttention(layers.Layer):
         # expanded_hidden.shape == (batch_size, 1, hidden_size)
         # enc_outputs.shape == (batch_size, max_len, hidden_size)
 
-        score = self.score(tf.nn.tanh(self.hidden(expanded_hidden) + self.context(enc_outputs)))
+        score = self.scoring(tf.nn.tanh(self.hidden(expanded_hidden) + self.context(enc_outputs)))
         # score.shape == (batch_size, max_len, 1)
 
         attn_weights = tf.nn.softmax(score, axis=1)
