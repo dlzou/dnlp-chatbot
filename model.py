@@ -52,107 +52,54 @@ class ChatbotModel(tf.Module):
                                               optimizer=self.optimizer)
 
 
-    def __call__(self, batch_inputs, batch_targets, train=False):
+    def __call__(self, batch_inputs, batch_targets, targets_shape, train=False):
         """Call interface to replace train_batch and test_batch.
         batch_inputs and batch_targets are zero-padded arrays.
         """
-        assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
+        # assert batch_inputs.shape[0] == batch_targets.shape[0], 'batch_size not consistent'
+        
+        # only prints once when traced by tf.function to compile a new graph
+        print("tracing __call__: ", batch_inputs.shape,
+              batch_targets.shape, targets_shape)
 
-        batch_size = len(batch_inputs)
+        batch_size = targets_shape[0]
         hidden_state = self.encoder.get_init_state(batch_size)
         enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
         dec_inputs = tf.fill([batch_size, 1], self.vocab_int['<SOS>'])
-        predicted_outputs = tf.fill([batch_size, 1], self.vocab_int['<SOS>'])
-        grad_loss = 0
+        grad_loss = 0.
 
         if train:
             # teacher forcing: feeding the target (instead of prediction) as the next input
-            for t in range(1, batch_targets.shape[1]):
+            for t in range(1, targets_shape[1]):
                 predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
                 targets = batch_targets[:, t]
                 grad_loss += self.loss_fn(targets, predictions)
 
                 predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
                 predicted_ids = tf.expand_dims(predicted_ids, 1)
-                predicted_outputs = tf.concat([predicted_outputs, predicted_ids], axis=-1)
                 dec_inputs = tf.expand_dims(targets, 1)
+
         else:
-            for t in range(1, batch_targets.shape[1]):
+            for t in range(1, targets_shape[1]):
                 predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
                 grad_loss += self.loss_fn(batch_targets[:, t], predictions)
 
                 predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
                 predicted_ids = tf.expand_dims(predicted_ids, 1)
-                predicted_outputs = tf.concat([predicted_outputs, predicted_ids], axis=-1)
                 dec_inputs = predicted_ids
 
         # batch_loss = grad_loss / int(batch_targets.shape[1])
-        return predicted_outputs, grad_loss
+        return grad_loss
 
 
-    def train_batch(self, batch_inputs, batch_targets):
-        """Used for mini-batch training.
-        Kept for reference; use call interface instead.
-        """
-        assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
-
-        batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
-        batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets, padding='post')
-        batch_size = batch_inputs.shape[0]
-        loss = 0
-
-        with tf.GradientTape() as tape:
-            hidden_state = self.encoder.get_init_state(batch_size)
-            enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
-            dec_inputs = tf.expand_dims([self.vocab_int['<SOS>']] * batch_size, 1)
-
-            # teacher forcing: feeding the target (instead of prediction) as the next input
-            for t in range(1, batch_targets.shape[1]):
-                predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
-                targets = batch_targets[:, t]
-                loss += self.loss_fn(targets, predictions)
-                dec_inputs = tf.expand_dims(targets, 1)
-
-        batch_loss = loss / int(batch_targets.shape[1])
-        variables = self.encoder.trainable_variables + self.decoder.trainable_variables
-        gradients = tape.gradient(loss, variables)
-        self.optimizer.apply_gradients(zip(gradients, variables))
-        return batch_loss
-
-
-    def test_batch(self, batch_inputs, batch_targets):
-        """Similar to train_batch, but no gradient descent.
-        Kept for reference; use call interface instead.
-        """
-        assert len(batch_inputs) == len(batch_targets), 'batch_size is not consistent'
-
-        batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs, padding='post')
-        batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets, padding='post')
-        batch_size = batch_inputs.shape[0]
-        loss = 0
-
-        hidden_state = self.encoder.get_init_state(batch_size)
-        enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
-        dec_inputs = tf.expand_dims([self.vocab_int['<SOS>']] * batch_size, 1)
-
-        for t in range(1, batch_targets.shape[1]):
-            predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
-            loss += self.loss_fn(batch_targets[:, t], predictions)
-            predicted_ids = tf.argmax(predictions, axis=1).numpy()
-            dec_inputs = tf.expand_dims(predicted_ids, 1)
-
-        batch_loss = loss / int(batch_targets.shape[1])
-        return batch_loss
-
-
-    def evaluate(self, input_seq, max_output_len):
+    def evaluate(self, input_seq, max_out_len):
         input_seq = tf.convert_to_tensor(input_seq)
         hidden_state = self.encoder.get_init_state(1)
         enc_output, hidden_state = self.encoder(input_seq, hidden_state)
         dec_input = tf.expand_dims([self.vocab_int['<SOS>']], 0)
         output_seq = []
 
-        for t in range(max_output_len):
+        for t in range(max_out_len):
             predictions, hidden_state = self.decoder(dec_input, hidden_state, enc_output)
             predicted_id = tf.argmax(predictions[0]).numpy()
             output_seq.append(predicted_id)
@@ -163,6 +110,18 @@ class ChatbotModel(tf.Module):
         return output_seq
 
 
+    def loss_fn(self, targets, predictions):
+        loss = self.loss_obj(targets, predictions)
+        mask = tf.math.logical_not(tf.math.equal(targets, 0))
+        mask = tf.cast(mask, dtype=loss.dtype)
+        loss *= mask
+        return tf.math.reduce_mean(loss)
+
+
+    def get_train_vars(self):
+        return self.encoder.trainable_variables + self.decoder.trainable_variables
+
+
     def save(self):
         self.checkpoint.save(self.save_path)
 
@@ -171,13 +130,6 @@ class ChatbotModel(tf.Module):
         status = self.checkpoint.restore(tf.train.latest_checkpoint(self.save_path))
         status.assert_comsumed()
 
-
-    def loss_fn(self, targets, predictions):
-        loss = self.loss_obj(targets, predictions)
-        mask = tf.math.logical_not(tf.math.equal(targets, 0))
-        mask = tf.cast(mask, dtype=loss.dtype)
-        loss *= mask
-        return tf.math.reduce_mean(loss)
 
 
 class Encoder(tf.keras.Model):
@@ -214,6 +166,7 @@ class Encoder(tf.keras.Model):
     def get_init_state(self, batch_size):
         # doubled because bidirectional
         return [tf.zeros((batch_size, self.units)) for i in range(2 * self.n_layers)]
+
 
 
 class Decoder(tf.keras.Model):
@@ -253,6 +206,7 @@ class Decoder(tf.keras.Model):
         # predictions.shape == (batch_size, vocab_size)
 
         return predictions, tf.concat([forward_state, reverse_state], axis=-1)
+
 
 
 class BahdanauAttention(layers.Layer):

@@ -113,20 +113,24 @@ def gen_batch_indices(indices, batch_size):
         yield indices[start: start + batch_size]
 
 
-# @tf.function # not working
-def train_batch(batch_inputs, batch_targets):
+@tf.function(input_signature=[tf.TensorSpec((None, None), tf.int32),
+                              tf.TensorSpec((None, None), tf.int32),
+                              tf.TensorSpec((2,), tf.int32)])
+def train_batch(batch_inputs, batch_targets, targets_shape):
     with tf.GradientTape() as tape:
-        _, grad_loss = chatbot(batch_inputs, batch_targets, train=True)
-        train_vars = chatbot.trainable_variables
+        grad_loss = chatbot(batch_inputs, batch_targets, targets_shape, train=True)
+        train_vars = chatbot.get_train_vars()
         gradients = tape.gradient(grad_loss, train_vars)
         optimizer.apply_gradients(zip(gradients, train_vars))
-    return grad_loss / int(batch_targets.shape[1])
+    return grad_loss / tf.cast(targets_shape[1], tf.float32)
 
 
-# @tf.function # not working
-def test_batch(batch_inputs, batch_targets):
-    _, grad_loss = chatbot(batch_inputs, batch_targets)
-    return grad_loss / int(batch_targets.shape[1])
+@tf.function(input_signature=[tf.TensorSpec((None, None), tf.int32),
+                              tf.TensorSpec((None, None), tf.int32),
+                              tf.TensorSpec((2,), tf.int32)])
+def test_batch(batch_inputs, batch_targets, targets_shape):
+    grad_loss = chatbot(batch_inputs, batch_targets, targets_shape)
+    return grad_loss / tf.cast(targets_shape[1], tf.float32)
 
 
 print("Starting training")
@@ -144,11 +148,17 @@ for tr, val in cross_val.split(train_inputs, train_targets):
         for (batch_i, batch_indices) in enumerate(train_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
-            batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
-                                                                         padding='post')
-            batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets,
-                                                                          padding='post')
-            total_train_loss += train_batch(batch_inputs, batch_targets)
+            batch_inputs = tf.convert_to_tensor(
+                tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
+                                                              padding='post'),
+                dtype=tf.int32)
+            batch_targets = tf.convert_to_tensor(
+                tf.keras.preprocessing.sequence.pad_sequences(batch_targets,
+                                                              padding='post'),
+                dtype=tf.int32)
+            total_train_loss += train_batch(batch_inputs,
+                                            batch_targets,
+                                            batch_targets.shape)
 
             if (batch_i + 1) % REPORT_FREQ == 0:
                 print('Epoch {}, batch {}-{} loss: {:.4f}'.format(epoch + 1,
@@ -161,11 +171,17 @@ for tr, val in cross_val.split(train_inputs, train_targets):
         for (batch_i, batch_indices) in enumerate(validation_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
-            batch_inputs = tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
-                                                                         padding='post')
-            batch_targets = tf.keras.preprocessing.sequence.pad_sequences(batch_targets,
-                                                                          padding='post')
-            fold_validation_loss.append(test_batch(batch_inputs, batch_targets))
+            batch_inputs = tf.convert_to_tensor(
+                tf.keras.preprocessing.sequence.pad_sequences(batch_inputs,
+                                                              padding='post'),
+                dtype=tf.int32)
+            batch_targets = tf.convert_to_tensor(
+                tf.keras.preprocessing.sequence.pad_sequences(batch_targets,
+                                                              padding='post'),
+                dtype=tf.int32)
+            fold_validation_loss.append(test_batch(batch_inputs,
+                                                   batch_targets,
+                                                   batch_targets.shape))
 
         print('Epoch {} time: {} sec\n'.format(epoch + 1,
                                                time.time() - start_epoch))
@@ -174,4 +190,4 @@ for tr, val in cross_val.split(train_inputs, train_targets):
 
     print('Fold time: {}'.format(time.time() - start_fold))
     print(fold_validation_loss)
-    break # bamboozled, stopping at one fold because I'm impatient
+    break  # bamboozled, stopping at one fold because I'm impatient
