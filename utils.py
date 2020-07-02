@@ -18,20 +18,23 @@ def clean_text(s):
     return s
 
 
+def load_vocab_index(file_path):
+    with open(file_path) as f:
+        vocab = f.read().split('\n')
+        vocab_index = {}
+        for i, v in enumerate(vocab):
+            vocab_index[v] = i
+    return vocab_index
+
+
 def load_train_data(file_path):
     with open(file_path) as f:
         inputs, targets = [], []
         for pair in f.read().split('\n'):
-            inp, targ = pair.split(',')
-            inputs.append(inp.split(' '))
-            targets.append(targ.split(' '))
+            pair = pair.split(',')
+            if len(pair) < 2:
+                break
+            inp, targ = pair[0], pair[1]
+            inputs.append(list(map(int, inp.split(' '))))
+            targets.append(list(map(int, targ.split(' '))))
     return inputs, targets
-
-
-def load_vocab_int(file_path):
-    with open(file_path) as f:
-        vocab = f.read().split('\n')
-        vocab_int = {}
-        for i, v in enumerate(vocab):
-            vocab_int[v] = i
-    return vocab_int

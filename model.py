@@ -29,21 +29,21 @@ class ChatbotModel(tf.Module):
     Lilian Weng's blog: "Attention? Attention!"
     """
 
-    def __init__(self, hparams, vocab_int, save_path, name=None):
+    def __init__(self, hparams, vocab_index, save_path, name=None):
         super(ChatbotModel, self).__init__(name=name)
         self.hparams = hparams
-        self.encoder = Encoder(len(vocab_int),
+        self.encoder = Encoder(len(vocab_index),
                                hparams['embedding_dim'],
                                hparams['units'],
                                hparams['n_layers'],
                                dropout=hparams['dropout'])
-        self.decoder = Decoder(len(vocab_int),
+        self.decoder = Decoder(len(vocab_index),
                                hparams['embedding_dim'],
                                hparams['units'],
                                hparams['n_layers'],
                                dropout=hparams['dropout'])
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=hparams['learn_rate']) # unused
-        self.vocab_int = vocab_int
+        self.vocab_index = vocab_index
         self.save_path = save_path
         self.loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True,
                                                                       reduction='none')
@@ -65,7 +65,7 @@ class ChatbotModel(tf.Module):
         batch_size = targets_shape[0]
         hidden_state = self.encoder.get_init_state(batch_size)
         enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
-        dec_inputs = tf.fill([batch_size, 1], self.vocab_int['<SOS>'])
+        dec_inputs = tf.fill([batch_size, 1], self.vocab_index['<SOS>'])
         grad_loss = 0.
 
         if train:
@@ -96,7 +96,7 @@ class ChatbotModel(tf.Module):
         input_seq = tf.convert_to_tensor(input_seq)
         hidden_state = self.encoder.get_init_state(1)
         enc_output, hidden_state = self.encoder(input_seq, hidden_state)
-        dec_input = tf.expand_dims([self.vocab_int['<SOS>']], 0)
+        dec_input = tf.expand_dims([self.vocab_index['<SOS>']], 0)
         output_seq = []
 
         for t in range(max_out_len):
