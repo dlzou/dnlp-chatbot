@@ -15,7 +15,7 @@ class ChatbotModel(tf.Module):
     }
 
     Format for vocabulary:
-    vocab_int = {
+    vocab_index = {
         '<PAD>': 0,
         '<SOS>': 1,
         '<EOS>': 2,
@@ -71,7 +71,7 @@ class ChatbotModel(tf.Module):
         if train:
             # teacher forcing: feeding the target (instead of prediction) as the next input
             for t in range(1, targets_shape[1]):
-                predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
+                predictions, hidden_state = self.decoder(dec_inputs, hidden_state, enc_outputs)
                 targets = batch_targets[:, t]
                 grad_loss += self.loss_fn(targets, predictions)
 
@@ -81,7 +81,7 @@ class ChatbotModel(tf.Module):
 
         else:
             for t in range(1, targets_shape[1]):
-                predictions, _ = self.decoder(dec_inputs, hidden_state, enc_outputs)
+                predictions, hidden_state = self.decoder(dec_inputs, hidden_state, enc_outputs)
                 grad_loss += self.loss_fn(batch_targets[:, t], predictions)
 
                 predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
@@ -93,19 +93,19 @@ class ChatbotModel(tf.Module):
 
 
     def evaluate(self, input_seq, max_out_len):
-        input_seq = tf.convert_to_tensor(input_seq)
+        input_seq = tf.expand_dims(tf.convert_to_tensor(input_seq), 0)
         hidden_state = self.encoder.get_init_state(1)
         enc_output, hidden_state = self.encoder(input_seq, hidden_state)
-        dec_input = tf.expand_dims([self.vocab_index['<SOS>']], 0)
+        dec_input = tf.expand_dims([self.vocab_index['<SOS>']], 1)
         output_seq = []
 
         for t in range(max_out_len):
             predictions, hidden_state = self.decoder(dec_input, hidden_state, enc_output)
             predicted_id = tf.argmax(predictions[0]).numpy()
             output_seq.append(predicted_id)
-            if predicted_id == self.vocab_int['<EOS>']:
+            if predicted_id == self.vocab_index['<EOS>']:
                 return output_seq
-            dec_input = tf.expand_dims([predicted_id], 0)
+            dec_input = tf.expand_dims([predicted_id], 1)
 
         return output_seq
 
@@ -128,7 +128,7 @@ class ChatbotModel(tf.Module):
 
     def restore(self):
         status = self.checkpoint.restore(tf.train.latest_checkpoint(self.save_path))
-        status.assert_comsumed()
+        # status.assert_comsumed()
 
 
 
