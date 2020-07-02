@@ -103,7 +103,7 @@ else:
     inputs, targets = utils.load_train_data(TRAIN_FILE)
 
 # ain't nobody got time
-inputs, targets = inputs[:10000], targets[:10000]
+inputs, targets = inputs[:20000], targets[:20000]
 
 train_inputs, test_inputs, train_targets, test_targets = train_test_split(inputs,
                                                                           targets,
@@ -118,7 +118,7 @@ MAX_EPOCHS = 20
 BATCH_SIZE = 32
 LEARN_RATE = 0.001
 REPORT_FREQ = 10  # batches between each printed report
-SAVE_FREQ = 2 # epochs between each checkpoint
+SAVE_FREQ = 5 # epochs between each checkpoint
 hparams = {
     'embedding_dim': 256,
     'units': 256,

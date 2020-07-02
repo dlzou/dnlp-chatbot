@@ -57,7 +57,7 @@ class ChatbotModel(tf.Module):
         batch_inputs and batch_targets are zero-padded arrays.
         """
         # assert batch_inputs.shape[0] == batch_targets.shape[0], 'batch_size not consistent'
-        
+
         # only prints once when traced by tf.function to compile a new graph
         print("tracing __call__: ", batch_inputs.shape,
               batch_targets.shape, targets_shape)
@@ -157,10 +157,13 @@ class Encoder(tf.keras.Model):
 
         # not sure, pls improve docs google
         outputs = output_tuple[0]
-        forward_state = output_tuple[len(output_tuple) // 2]
-        reverse_state = output_tuple[-1]
+        # outputs shape is (batch_size, seq_len, 2 * units)
 
-        return outputs, tf.concat([forward_state, reverse_state], axis=-1)
+        # forward_state = output_tuple[len(output_tuple) // 2]
+        # reverse_state = output_tuple[-1]
+        # return outputs, tf.concat([forward_state, reverse_state], axis=-1)
+        states = output_tuple[1:]
+        return outputs, states
 
 
     def get_init_state(self, batch_size):
@@ -189,23 +192,33 @@ class Decoder(tf.keras.Model):
         self.predictor = tf.keras.layers.Dense(vocab_size)
 
 
-    def call(self, inputs, state, enc_outputs):
-        # enc_outputs shape == (batch_size, max_len, state_size)
-        context_vec, _ = self.attention(state, enc_outputs)
+    def call(self, inputs, states, enc_outputs):
+        # enc_outputs shape is (batch_size, max_len, state_size)
+
+        # context_vec, _ = self.attention(state, enc_outputs)
+        last_forward = states[len(states) // 2 - 1]
+        last_reverse = states[-1]
+        context_vec, _ = self.attention(tf.concat([last_forward, last_reverse], axis=-1),
+                                        enc_outputs)
+
         inputs = self.embedding(inputs)
         inputs = tf.concat([tf.expand_dims(context_vec, 1), inputs], axis=-1)
-        # x.shape == (batch_size, 1, embedding_dim + state_size)
+        # inputs shape is (batch_size, 1, embedding_dim + state_size)
 
-        output_tuple = self.gru(inputs)
+        # output_tuple = self.gru(inputs)
+        output_tuple = self.gru(inputs, initial_state=states)
         outputs = output_tuple[0]
-        forward_state = output_tuple[len(output_tuple) // 2]
-        reverse_state = output_tuple[-1]
+
+        states = output_tuple[1:]
+        # forward_state = output_tuple[len(output_tuple) // 2]
+        # reverse_state = output_tuple[-1]
 
         outputs = tf.reshape(outputs, (-1, outputs.shape[2]))
         predictions = self.predictor(outputs)
-        # predictions.shape == (batch_size, vocab_size)
+        # predictions shape is (batch_size, vocab_size)
 
-        return predictions, tf.concat([forward_state, reverse_state], axis=-1)
+        # return predictions, tf.concat([forward_state, reverse_state], axis=-1)
+        return predictions, states
 
 
 
@@ -224,17 +237,17 @@ class BahdanauAttention(layers.Layer):
 
     def call(self, hidden, enc_outputs):
         expanded_hidden = tf.expand_dims(hidden, 1)
-        # expanded_hidden.shape == (batch_size, 1, hidden_size)
-        # enc_outputs.shape == (batch_size, max_len, hidden_size)
+        # expanded_hidden shape is (batch_size, 1, hidden_size)
+        # enc_outputs shape is (batch_size, max_len, hidden_size)
 
         score = self.scoring(tf.nn.tanh(self.hidden(expanded_hidden) + self.context(enc_outputs)))
-        # score.shape == (batch_size, max_len, 1)
+        # score shape is (batch_size, max_len, 1)
 
         attn_weights = tf.nn.softmax(score, axis=1)
-        # attn_weights shape == (batch_size, max_len, 1)
+        # attn_weights shape is (batch_size, max_len, 1)
 
         context_vec = attn_weights * enc_outputs
         context_vec = tf.reduce_sum(context_vec, axis=1)
-        # context_vec.shape == (batch_size, hidden_size)
+        # context_vec shape is (batch_size, hidden_size)
 
         return context_vec, attn_weights
