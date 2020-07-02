@@ -13,6 +13,9 @@ CMDC is organized such that collections of lines form conversations. After parsi
 I initially referenced tutorials from SuperDataScience and TensorFlow. As I branched out, I came across many blogs and papers to helped me learn about RNNs, attention, and beam search. I also got a glimpse of hierarchical encoders, transformers, and other state-of-the-art techniques.
 
 Some extra helpful ones:
+
 [colah's blog on LSTMs](https://colah.github.io/posts/2015-08-Understanding-LSTMs/)
+
 [Lil'Log on attention](https://lilianweng.github.io/lil-log/2018/06/24/attention-attention.html)
+
 [Beam search (Wiseman, Rush)](https://arxiv.org/pdf/1606.02960.pdf)
