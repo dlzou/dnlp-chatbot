@@ -1,6 +1,6 @@
 # Deep NLP Chatbot
 
-A seq2seq model built in TensorFlow 2 and trained on movie dialogue from the [Cornell Movie-Dialogs Corpus](https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html). 
+A chatbot based on the recurrent seq2seq model, built in TensorFlow 2 and trained on movie dialogue from the [Cornell Movie-Dialogs Corpus](https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html). 
 
 ### Details
 

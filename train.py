@@ -160,7 +160,7 @@ print("Starting training...")
 
 cross_val = KFold(n_splits=10)
 progresses = []
-for tr, val in cross_val.split(train_inputs, train_targets):
+for fold_i, (tr, val) in enumerate(cross_val.split(train_inputs, train_targets)):
     fold_loss_progress = np.zeros((MAX_EPOCHS,))
     start_fold = time.time()
 
@@ -217,18 +217,21 @@ for tr, val in cross_val.split(train_inputs, train_targets):
                                           batch_targets.shape)
         fold_loss_progress[epoch] += validation_loss / (batch_i + 1)
 
-        print('=====')
+        print('-----')
         print('Epoch {} time: {:.4f} sec'.format(epoch + 1,
                                                  time.time() - start_epoch))
         print('Progress: ' + np.array_str(fold_loss_progress))
         if (epoch + 1) % SAVE_FREQ == 0:
             chatbot.save()
             print('Checkpoint saved')
-        print('=====\n')
+        print('-----\n')
 
     progresses.append(fold_loss_progress)
+    chatbot.save()
+    print('===== FOLD {} COMPLETE ====='.format(fold_i))
     print('Fold time: {}'.format(time.time() - start_fold))
     print(fold_loss_progress)
+    print('============================\n')
 
 x = np.arange(1, MAX_EPOCHS + 1)
 for i, fold in enumerate(progresses):
