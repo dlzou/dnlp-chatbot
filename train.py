@@ -103,7 +103,7 @@ else:
     inputs, targets = utils.load_train_data(TRAIN_FILE)
 
 # ain't nobody got time
-inputs, targets = inputs[:20000], targets[:20000]
+inputs, targets = inputs[:50000], targets[:50000]
 
 train_inputs, test_inputs, train_targets, test_targets = train_test_split(inputs,
                                                                           targets,
@@ -159,8 +159,9 @@ def test_batch(batch_inputs, batch_targets, targets_shape):
 print("Starting training...")
 
 cross_val = KFold(n_splits=10)
+progresses = []
 for tr, val in cross_val.split(train_inputs, train_targets):
-    fold_loss_progress = []
+    fold_loss_progress = np.zeros((MAX_EPOCHS,))
     start_fold = time.time()
 
     for epoch in range(MAX_EPOCHS):
@@ -168,7 +169,7 @@ for tr, val in cross_val.split(train_inputs, train_targets):
         train_loss = 0
         start_epoch = time.time()
 
-        for (batch_i, batch_indices) in enumerate(train_gen):
+        for batch_i, batch_indices in enumerate(train_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
             if len(batch_inputs) != len(batch_targets) or len(batch_inputs) < 1:
@@ -196,8 +197,8 @@ for tr, val in cross_val.split(train_inputs, train_targets):
 
         validation_gen = gen_batch_indices(val, BATCH_SIZE)
         validation_loss = 0
-        
-        for (batch_i, batch_indices) in enumerate(validation_gen):
+
+        for batch_i, batch_indices in enumerate(validation_gen):
             batch_inputs = [train_inputs[i] for i in batch_indices]
             batch_targets = [train_targets[i] for i in batch_indices]
             if len(batch_inputs) != len(batch_targets) or len(batch_inputs) < 1:
@@ -214,17 +215,23 @@ for tr, val in cross_val.split(train_inputs, train_targets):
             validation_loss += test_batch(batch_inputs,
                                           batch_targets,
                                           batch_targets.shape)
-        fold_loss_progress.append(validation_loss / batch_i)
+        fold_loss_progress[epoch] += validation_loss / (batch_i + 1)
 
         print('=====')
-        print('Epoch {} time: {} sec'.format(epoch + 1,
-                                             time.time() - start_epoch))
-        print('Progress: ' + ' '.join(map(str, fold_loss_progress)))
+        print('Epoch {} time: {:.4f} sec'.format(epoch + 1,
+                                                 time.time() - start_epoch))
+        print('Progress: ' + np.array_str(fold_loss_progress))
         if (epoch + 1) % SAVE_FREQ == 0:
             chatbot.save()
             print('Checkpoint saved')
         print('=====\n')
 
+    progresses.append(fold_loss_progress)
     print('Fold time: {}'.format(time.time() - start_fold))
     print(fold_loss_progress)
-    break  # bamboozled, stopping at one fold because I'm impatient
+
+x = np.arange(1, MAX_EPOCHS + 1)
+for i, fold in enumerate(progresses):
+    plt.plot(x, fold, label=f'Fold {str(i)}')
+plt.legend()
+plt.show()

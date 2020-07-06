@@ -206,7 +206,8 @@ class Decoder(tf.keras.Model):
         # inputs shape is (batch_size, 1, embedding_dim + state_size)
 
         # output_tuple = self.gru(inputs)
-        output_tuple = self.gru(inputs, initial_state=states)
+        init_state = [last_forward] * self.n_layers + [last_reverse] * self.n_layers
+        output_tuple = self.gru(inputs, initial_state=init_state)
         outputs = output_tuple[0]
 
         states = output_tuple[1:]
