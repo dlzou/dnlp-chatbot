@@ -10,8 +10,7 @@ class ChatbotModel(tf.Module):
         'embedding_dim': x,
         'units': x,
         'n_layers': x,
-        'dropout': x,
-        'learn_rate': x
+        'dropout': x
     }
 
     Format for vocabulary:
@@ -42,14 +41,12 @@ class ChatbotModel(tf.Module):
                                hparams['units'],
                                hparams['n_layers'],
                                dropout=hparams['dropout'])
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=hparams['learn_rate']) # unused
         self.vocab_index = vocab_index
         self.save_path = save_path
         self.loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True,
                                                                       reduction='none')
         self.checkpoint = tf.train.Checkpoint(encoder=self.encoder,
-                                              decoder=self.decoder,
-                                              optimizer=self.optimizer)
+                                              decoder=self.decoder)
 
 
     def __call__(self, batch_inputs, batch_targets, targets_shape, train=False):
