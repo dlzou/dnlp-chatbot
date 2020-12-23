@@ -23,7 +23,7 @@ class ChatbotModel(tf.Module):
     }
 
     References:
-    Tensorflow 2 tutorial: "Neural machine translation with attention"
+    TensorFlow 2 tutorial: "Neural machine translation with attention"
     SuperDataScience course: "Deep Learning and NLP A-Z: How to Create a Chatbot"
     Lilian Weng's blog: "Attention? Attention!"
     """
@@ -34,12 +34,10 @@ class ChatbotModel(tf.Module):
         self.encoder = Encoder(len(vocab_index),
                                hparams['embedding_dim'],
                                hparams['units'],
-                               hparams['n_layers'],
                                dropout=hparams['dropout'])
         self.decoder = Decoder(len(vocab_index),
                                hparams['embedding_dim'],
                                hparams['units'],
-                               hparams['n_layers'],
                                dropout=hparams['dropout'])
         self.vocab_index = vocab_index
         self.save_path = save_path
@@ -56,34 +54,33 @@ class ChatbotModel(tf.Module):
         # assert batch_inputs.shape[0] == batch_targets.shape[0], 'batch_size not consistent'
 
         # only prints once when traced by tf.function to compile a new graph
-        print("tracing __call__: ", batch_inputs.shape,
-              batch_targets.shape, targets_shape)
+        print("tracing __call__: ", batch_inputs.shape, batch_targets.shape, targets_shape)
 
         batch_size = targets_shape[0]
-        hidden_state = self.encoder.get_init_state(batch_size)
-        enc_outputs, hidden_state = self.encoder(batch_inputs, hidden_state)
-        dec_inputs = tf.fill([batch_size, 1], self.vocab_index['<SOS>'])
+        init_state = self.encoder.get_init_state(batch_size)
+        enc_output, dec_state = self.encoder(batch_inputs, init_state)
+        dec_input = tf.fill([batch_size, 1], self.vocab_index['<SOS>'])
         grad_loss = 0.
 
         if train:
             # teacher forcing: feeding the target (instead of prediction) as the next input
             for t in range(1, targets_shape[1]):
-                predictions, hidden_state = self.decoder(dec_inputs, hidden_state, enc_outputs)
+                predictions, dec_state = self.decoder(dec_input, dec_state, enc_output)
                 targets = batch_targets[:, t]
                 grad_loss += self.loss_fn(targets, predictions)
 
-                predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
-                predicted_ids = tf.expand_dims(predicted_ids, 1)
-                dec_inputs = tf.expand_dims(targets, 1)
+                # predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
+                # predicted_ids = tf.expand_dims(predicted_ids, 1)
+                dec_input = tf.expand_dims(targets, 1)
 
         else:
             for t in range(1, targets_shape[1]):
-                predictions, hidden_state = self.decoder(dec_inputs, hidden_state, enc_outputs)
+                predictions, dec_state = self.decoder(dec_input, dec_state, enc_output)
                 grad_loss += self.loss_fn(batch_targets[:, t], predictions)
 
                 predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
                 predicted_ids = tf.expand_dims(predicted_ids, 1)
-                dec_inputs = predicted_ids
+                dec_input = predicted_ids
 
         # batch_loss = grad_loss / int(batch_targets.shape[1])
         return grad_loss
@@ -91,13 +88,13 @@ class ChatbotModel(tf.Module):
 
     def evaluate(self, input_seq, max_out_len):
         input_seq = tf.expand_dims(tf.convert_to_tensor(input_seq), 0)
-        hidden_state = self.encoder.get_init_state(1)
-        enc_output, hidden_state = self.encoder(input_seq, hidden_state)
+        init_state = self.encoder.get_init_state(1)
+        enc_output, dec_state = self.encoder(input_seq, init_state)
         dec_input = tf.expand_dims([self.vocab_index['<SOS>']], 1)
         output_seq = []
 
         for t in range(max_out_len):
-            predictions, hidden_state = self.decoder(dec_input, hidden_state, enc_output)
+            predictions, dec_state = self.decoder(dec_input, dec_state, enc_output)
             predicted_id = tf.argmax(predictions[0]).numpy()
             output_seq.append(predicted_id)
             if predicted_id == self.vocab_index['<EOS>']:
@@ -132,120 +129,114 @@ class ChatbotModel(tf.Module):
 class Encoder(tf.keras.Model):
     """Encoder portion of the seq2seq model."""
 
-    def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
+    def __init__(self, vocab_size, embedding_dim, units, dropout=0.):
         super(Encoder, self).__init__()
         self.units = units
-        self.n_layers = n_layers
-        self.embedding_dim = embedding_dim
         self.embedding = layers.Embedding(vocab_size, embedding_dim, mask_zero=True)
-        gru_cells = [layers.GRUCell(units,
-                                    recurrent_initializer='glorot_uniform',
-                                    dropout=dropout)
-                     for _ in range(n_layers)]
-        self.gru = layers.Bidirectional(layers.RNN(gru_cells,
+        # self.n_layers = n_layers
+        # gru_cells = [layers.GRUCell(units,
+        #                             recurrent_initializer='glorot_uniform',
+        #                             dropout=dropout)
+        #              for _ in range(n_layers)]
+        # self.gru = layers.Bidirectional(layers.RNN(gru_cells,
+        #                                            return_sequences=True,
+        #                                            return_state=True))
+        self.gru = layers.Bidirectional(layers.GRU(self.units,
                                                    return_sequences=True,
-                                                   return_state=True))
+                                                   return_state=True,
+                                                   recurrent_initializer='glorot_uniform'))
 
 
-    def call(self, inputs, state):
+    def call(self, enc_inputs, init_state):
         # inputs are in mini-batches
-        inputs = self.embedding(inputs)
-        output_tuple = self.gru(inputs, initial_state=state)
+        enc_inputs = self.embedding(enc_inputs)
+        tup = self.gru(enc_inputs, initial_state=init_state)
+        output = tup[0]
+        # output shape is (batch_size, seq_len, 2 * units)
 
-        # not sure, pls improve docs google
-        outputs = output_tuple[0]
-        # outputs shape is (batch_size, seq_len, 2 * units)
+        state = tf.concat(tup[1:], axis=-1)
 
-        # forward_state = output_tuple[len(output_tuple) // 2]
-        # reverse_state = output_tuple[-1]
-        # return outputs, tf.concat([forward_state, reverse_state], axis=-1)
-        states = output_tuple[1:]
-        return outputs, states
+        # concat forward and reverse hidden states
+        return output, state
 
 
     def get_init_state(self, batch_size):
         # doubled because bidirectional
-        return [tf.zeros((batch_size, self.units)) for i in range(2 * self.n_layers)]
+        return [tf.zeros((batch_size, self.units)) for _ in range(2)]
 
 
 
 class Decoder(tf.keras.Model):
     """Decoder portion of the seq2seq model."""
 
-    def __init__(self, vocab_size, embedding_dim, units, n_layers, dropout=0.):
+    def __init__(self, vocab_size, embedding_dim, units, dropout=0.):
         super(Decoder, self).__init__()
         self.units = units
-        self.n_layers = n_layers
-        self.embedding_dim = embedding_dim
         self.embedding = layers.Embedding(vocab_size, embedding_dim)
         self.attention = BahdanauAttention(units)
-        gru_cells = [layers.GRUCell(units,
-                                    recurrent_initializer='glorot_uniform',
-                                    dropout=dropout)
-                     for _ in range(n_layers)]
-        self.gru = layers.Bidirectional(layers.RNN(gru_cells,
-                                                   return_sequences=True,
-                                                   return_state=True))
         self.predictor = tf.keras.layers.Dense(vocab_size)
+        # self.n_layers = n_layers
+        # gru_cells = [layers.GRUCell(units,
+        #                             recurrent_initializer='glorot_uniform',
+        #                             dropout=dropout)
+        #              for _ in range(n_layers)]
+        # self.gru = layers.Bidirectional(layers.RNN(gru_cells,
+        #                                            return_sequences=True,
+        #                                            return_state=True))
+        self.gru = layers.Bidirectional(layers.GRU(self.units,
+                                                   return_sequences=True,
+                                                   return_state=True,
+                                                   recurrent_initializer='glorot_uniform'))
 
 
-    def call(self, inputs, states, enc_outputs):
-        # enc_outputs shape is (batch_size, max_len, state_size)
+    def call(self, dec_input, dec_state, enc_output):
+        # enc_output shape is (batch_size, max_len, states_size)
+        context_vec, _ = self.attention(dec_state, enc_output)
+        dec_input = self.embedding(dec_input)
 
-        # context_vec, _ = self.attention(state, enc_outputs)
-        last_forward = states[len(states) // 2 - 1]
-        last_reverse = states[-1]
-        context_vec, _ = self.attention(tf.concat([last_forward, last_reverse], axis=-1),
-                                        enc_outputs)
+        dec_input = tf.concat([tf.expand_dims(context_vec, 1), dec_input], axis=-1)
+        # inputs shape is (batch_size, 1, embedding_dim + states_size)
 
-        inputs = self.embedding(inputs)
-        inputs = tf.concat([tf.expand_dims(context_vec, 1), inputs], axis=-1)
-        # inputs shape is (batch_size, 1, embedding_dim + state_size)
+        tup = self.gru(dec_input)
 
-        # output_tuple = self.gru(inputs)
-        init_state = [last_forward] * self.n_layers + [last_reverse] * self.n_layers
-        output_tuple = self.gru(inputs, initial_state=init_state)
-        outputs = output_tuple[0]
-
-        states = output_tuple[1:]
-        # forward_state = output_tuple[len(output_tuple) // 2]
-        # reverse_state = output_tuple[-1]
-
-        outputs = tf.reshape(outputs, (-1, outputs.shape[2]))
-        predictions = self.predictor(outputs)
+        output = tup[0]
+        output = tf.reshape(output, (-1, output.shape[2]))
+        predictions = self.predictor(output)
         # predictions shape is (batch_size, vocab_size)
 
-        # return predictions, tf.concat([forward_state, reverse_state], axis=-1)
-        return predictions, states
+        state = tf.concat(tup[1:], axis=-1)
+
+        return predictions, state
 
 
 
 class BahdanauAttention(layers.Layer):
-    """Implementation of the Bahdanau attention mechanism.
+    """
+    Implementation of the Bahdanau attention mechanism.
 
     An instance is maintained by the decoder.
     """
 
     def __init__(self, units):
         super(BahdanauAttention, self).__init__()
-        self.hidden = layers.Dense(units)
+        self.state = layers.Dense(units)
         self.context = layers.Dense(units)
         self.scoring = layers.Dense(1)
 
 
-    def call(self, hidden, enc_outputs):
-        expanded_hidden = tf.expand_dims(hidden, 1)
-        # expanded_hidden shape is (batch_size, 1, hidden_size)
-        # enc_outputs shape is (batch_size, max_len, hidden_size)
+    def call(self, dec_state, enc_output):
+        dec_state = tf.expand_dims(dec_state, 1)
+        # expanded_states shape is (batch_size, 1, states_size)
+        # enc_output shape is (batch_size, max_len, states_size)
 
-        score = self.scoring(tf.nn.tanh(self.hidden(expanded_hidden) + self.context(enc_outputs)))
+        score = self.scoring(tf.nn.tanh(self.state(dec_state) + self.context(enc_output)))
         # score shape is (batch_size, max_len, 1)
 
         attn_weights = tf.nn.softmax(score, axis=1)
         # attn_weights shape is (batch_size, max_len, 1)
 
-        context_vec = attn_weights * enc_outputs
+        context_vec = attn_weights * enc_output
         context_vec = tf.reduce_sum(context_vec, axis=1)
-        # context_vec shape is (batch_size, hidden_size)
+        # context_vec shape is (batch_size, states_size)
 
         return context_vec, attn_weights
