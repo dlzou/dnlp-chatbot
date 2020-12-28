@@ -116,14 +116,13 @@ train_inputs, test_inputs, train_targets, test_targets = train_test_split(inputs
 CHECKPOINT = 'checkpoint/checkpoint.ckpt'
 MAX_EPOCHS = 20
 BATCH_SIZE = 32
-LEARN_RATE = 0.001
+LEARN_RATE = 0.01
 REPORT_FREQ = 10  # batches between each printed report
 SAVE_FREQ = 5 # epochs between each checkpoint
 hparams = {
     'embedding_dim': 256,
     'units': 256,
     'dropout': 0.1,
-    'learn_rate': 0.001,
     'beam_width': 3
 }
 chatbot = model.ChatbotModel(hparams, vocab_index, CHECKPOINT)
