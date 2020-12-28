@@ -1,12 +1,14 @@
 # Deep NLP Chatbot
 
-A chatbot based on the recurrent seq2seq model, built in TensorFlow 2 and trained on movie dialogue from the [Cornell Movie-Dialogs Corpus](https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html). 
+A chatbot based on the recurrent seq2seq model, built in TensorFlow 2 and trained on movie dialogue from the [Cornell Movie-Dialogs Corpus](https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html).
 
 ### Details
 
-My model uses a standard recurrent encoder-decoder architecture. Both the encoder and the decoder are implemented as stacked bidirectional RNNs with GRU cells, and a Bahdanau-style attention mechanism improves memory of long sequences during decoding. In the future, I may upgrade the greedy search decoder to a beam search decoder.
+My model uses a standard recurrent encoder-decoder architecture. I implemented both the encoder and the decoder as bidirectional RNNs with GRU cells, and I included a Bahdanau-style attention mechanism to improves memory of long sequences during decoding. At the evaluation stage, beam search is used to decode input sequences. A possible next step is to reimplement the training stage with beam search as well.
 
-CMDC is organized such that collections of lines form conversations. After parsing the data, I iterated through each conversation to produce question-answer pairs, which became the input and target data for training.
+CMDC is organized such that collections of movie character lines form conversations. After parsing the data, I iterated through each conversation to produce question-answer pairs, which became the input and target data for training.
+
+Read [my blog post](https://dlzou.github.io/portfolio/2020/08/30/dnlp-chatbot.html) for more insights on this project.
 
 ### References
 

@@ -11,9 +11,9 @@ vocab_index = utils.load_vocab_index(VOCAB_FILE)
 hparams = {
     'embedding_dim': 256,
     'units': 256,
-    'n_layers': 2,
     'dropout': 0.1,
-    'learn_rate': 0.001
+    'learn_rate': 0.001,
+    'beam_width': 3
 }
 chatbot = model.ChatbotModel(hparams, vocab_index, CHECKPOINT)
 chatbot.restore()

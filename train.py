@@ -123,7 +123,8 @@ hparams = {
     'embedding_dim': 256,
     'units': 256,
     'dropout': 0.1,
-    'learn_rate': 0.001
+    'learn_rate': 0.001,
+    'beam_width': 3
 }
 chatbot = model.ChatbotModel(hparams, vocab_index, CHECKPOINT)
 optimizer = tf.optimizers.Adam(learning_rate=LEARN_RATE, clipnorm=1.)

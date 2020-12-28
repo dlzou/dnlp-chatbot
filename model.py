@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras.layers as layers
+from numpy import log
 
 
 class ChatbotModel(tf.Module):
@@ -30,7 +31,6 @@ class ChatbotModel(tf.Module):
 
     def __init__(self, hparams, vocab_index, save_path, name=None):
         super(ChatbotModel, self).__init__(name=name)
-        self.hparams = hparams
         self.encoder = Encoder(len(vocab_index),
                                hparams['embedding_dim'],
                                hparams['units'],
@@ -39,6 +39,7 @@ class ChatbotModel(tf.Module):
                                hparams['embedding_dim'],
                                hparams['units'],
                                dropout=hparams['dropout'])
+        self.beam_width = hparams['beam_width']
         self.vocab_index = vocab_index
         self.save_path = save_path
         self.loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True,
@@ -48,7 +49,8 @@ class ChatbotModel(tf.Module):
 
 
     def __call__(self, batch_inputs, batch_targets, targets_shape, train=False):
-        """Call interface to replace train_batch and test_batch.
+        """
+        Call interface to replace train_batch and test_batch.
         batch_inputs and batch_targets are zero-padded arrays.
         """
         # assert batch_inputs.shape[0] == batch_targets.shape[0], 'batch_size not consistent'
@@ -69,8 +71,6 @@ class ChatbotModel(tf.Module):
                 targets = batch_targets[:, t]
                 grad_loss += self.loss_fn(targets, predictions)
 
-                # predicted_ids = tf.math.argmax(predictions, axis=1, output_type=tf.dtypes.int32)
-                # predicted_ids = tf.expand_dims(predicted_ids, 1)
                 dec_input = tf.expand_dims(targets, 1)
 
         else:
@@ -86,22 +86,59 @@ class ChatbotModel(tf.Module):
         return grad_loss
 
 
-    def evaluate(self, input_seq, max_out_len):
+    def evaluate(self, input_seq, max_target_len):
+        """
+        Use beam search to decode inputs at runtime. Ideally the model should be trained with beam
+        search as well, but ¯\_(ツ)_/¯
+        """
         input_seq = tf.expand_dims(tf.convert_to_tensor(input_seq), 0)
         init_state = self.encoder.get_init_state(1)
         enc_output, dec_state = self.encoder(input_seq, init_state)
+
+        # first cycle
         dec_input = tf.expand_dims([self.vocab_index['<SOS>']], 1)
-        output_seq = []
+        predictions, dec_state = self.decoder(dec_input, dec_state, enc_output)
+        pred_vals, indices = tf.math.top_k(predictions[0], k=self.beam_width)
+        pred_vals = (-tf.math.log(pred_vals)).numpy().tolist() # log to prevent underflow
 
-        for t in range(max_out_len):
+        dec_input = tf.expand_dims(indices, 1)
+        dec_state = tf.tile(dec_state, [self.beam_width, 1])
+        enc_output = tf.tile(enc_output, [self.beam_width, 1, 1])
+        sequences = [[indices[b]] for b in range(self.beam_width)]
+
+        # beam search, taking advantage of batch inputs
+        # 0.5 chance this actually works as intended
+        # is there a more efficient way to do this, e.g. without Python lists?
+        for t in range(max_target_len):
             predictions, dec_state = self.decoder(dec_input, dec_state, enc_output)
-            predicted_id = tf.argmax(predictions[0]).numpy()
-            output_seq.append(predicted_id)
-            if predicted_id == self.vocab_index['<EOS>']:
-                return output_seq
-            dec_input = tf.expand_dims([predicted_id], 1)
+            predictions = predictions.numpy()
+            candidates = []
+            for b in range(self.beam_width):
+                predictions[b] = pred_vals[b] - log(predictions[b])
+                _pred_vals, _indices = tf.math.top_k(-predictions[b], k=self.beam_width)
+                for bb in range(self.beam_width):
+                    candidates.append([sequences[bb] + [_indices[bb]], -_pred_vals[bb], b])
 
-        return output_seq
+            candidates.sort(reverse=True, key=lambda c: c[1]) # sort by pred_vals
+            sequences, pred_vals, indices = zip(*candidates[:self.beam_width])
+            if sequences[0][-1] == self.vocab_index['<EOS>']:
+                return sequences[0]
+
+            dec_input = tf.convert_to_tensor([[s[-1]] for s in sequences])
+            dec_state = tf.stack([dec_state[i] for i in indices])
+
+        return sequences[0]
+
+        # greedy search
+        # sequence = []
+        # for t in range(max_target_len):
+        #     predictions, dec_state = self.decoder(dec_input, dec_state, enc_output)
+        #     predicted_id = tf.argmax(predictions[0]).numpy()
+        #     sequence.append(predicted_id)
+        #     if predicted_id == self.vocab_index['<EOS>']:
+        #         return sequences
+        #     dec_input = tf.expand_dims([predicted_id], 1)
+        # return sequence
 
 
     def loss_fn(self, targets, predictions):
@@ -174,7 +211,8 @@ class Decoder(tf.keras.Model):
         self.units = units
         self.embedding = layers.Embedding(vocab_size, embedding_dim)
         self.attention = BahdanauAttention(units)
-        self.predictor = tf.keras.layers.Dense(vocab_size)
+        self.predictor = layers.Dense(vocab_size)
+        self.softmax = layers.Softmax()
         # self.n_layers = n_layers
         # gru_cells = [layers.GRUCell(units,
         #                             recurrent_initializer='glorot_uniform',
@@ -201,7 +239,7 @@ class Decoder(tf.keras.Model):
 
         output = tup[0]
         output = tf.reshape(output, (-1, output.shape[2]))
-        predictions = self.predictor(output)
+        predictions = self.softmax(self.predictor(output))
         # predictions shape is (batch_size, vocab_size)
 
         state = tf.concat(tup[1:], axis=-1)
@@ -213,7 +251,6 @@ class Decoder(tf.keras.Model):
 class BahdanauAttention(layers.Layer):
     """
     Implementation of the Bahdanau attention mechanism.
-
     An instance is maintained by the decoder.
     """
 
