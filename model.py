@@ -4,8 +4,8 @@ from numpy import log
 
 
 # https://github.com/tensorflow/tensorflow/issues/36508
-gpus = tf.config.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(gpus[0], enable=True)
+# gpus = tf.config.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(gpus[0], enable=True)
 
 
 class ChatbotModel(tf.Module):
@@ -216,8 +216,7 @@ class Decoder(tf.keras.Model):
         self.units = units
         self.embedding = layers.Embedding(vocab_size, embedding_dim)
         self.attention = BahdanauAttention(units)
-        self.predictor = layers.Dense(vocab_size)
-        self.softmax = layers.Softmax()
+        self.predictor = layers.Dense(vocab_size, activation='softmax')
         # self.n_layers = n_layers
         # gru_cells = [layers.GRUCell(units,
         #                             recurrent_initializer='glorot_uniform',
@@ -244,7 +243,7 @@ class Decoder(tf.keras.Model):
 
         output = tup[0]
         output = tf.reshape(output, (-1, output.shape[2]))
-        predictions = self.softmax(self.predictor(output))
+        predictions = self.predictor(output)
         # predictions shape is (batch_size, vocab_size)
 
         state = tf.concat(tup[1:], axis=-1)
