@@ -3,6 +3,11 @@ import tensorflow.keras.layers as layers
 from numpy import log
 
 
+# https://github.com/tensorflow/tensorflow/issues/36508
+gpus = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(gpus[0], enable=True)
+
+
 class ChatbotModel(tf.Module):
     """seq2seq model using GRU cells.
 
