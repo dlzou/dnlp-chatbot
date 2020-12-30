@@ -32,6 +32,7 @@ class ChatbotModel(tf.Module):
     TensorFlow 2 tutorial: "Neural machine translation with attention"
     SuperDataScience course: "Deep Learning and NLP A-Z: How to Create a Chatbot"
     Lilian Weng's blog: "Attention? Attention!"
+    Maarten Sap: "Tips on training seq2seq type models"
     """
 
     def __init__(self, hparams, vocab_index, save_path, name=None):
@@ -42,13 +43,11 @@ class ChatbotModel(tf.Module):
                                dropout=hparams['dropout'])
         self.decoder = Decoder(len(vocab_index),
                                hparams['embedding_dim'],
-                               hparams['units'],
-                               dropout=hparams['dropout'])
+                               hparams['units'])
         self.beam_width = hparams['beam_width']
         self.vocab_index = vocab_index
         self.save_path = save_path
-        self.loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True,
-                                                                      reduction='none')
+        self.loss_obj = tf.keras.losses.SparseCategoricalCrossentropy()
         self.checkpoint = tf.train.Checkpoint(encoder=self.encoder,
                                               decoder=self.decoder)
 
@@ -186,7 +185,8 @@ class Encoder(tf.keras.Model):
         self.gru = layers.Bidirectional(layers.GRU(self.units,
                                                    return_sequences=True,
                                                    return_state=True,
-                                                   recurrent_initializer='glorot_uniform'))
+                                                   recurrent_initializer='glorot_uniform',
+                                                   dropout=dropout))
 
 
     def call(self, enc_inputs, init_state):
@@ -196,9 +196,9 @@ class Encoder(tf.keras.Model):
         output = tup[0]
         # output shape is (batch_size, seq_len, 2 * units)
 
+        # concat forward and reverse hidden states
         state = tf.concat(tup[1:], axis=-1)
 
-        # concat forward and reverse hidden states
         return output, state
 
 
@@ -211,7 +211,7 @@ class Encoder(tf.keras.Model):
 class Decoder(tf.keras.Model):
     """Decoder portion of the seq2seq model."""
 
-    def __init__(self, vocab_size, embedding_dim, units, dropout=0.):
+    def __init__(self, vocab_size, embedding_dim, units):
         super(Decoder, self).__init__()
         self.units = units
         self.embedding = layers.Embedding(vocab_size, embedding_dim)
@@ -237,7 +237,7 @@ class Decoder(tf.keras.Model):
         dec_input = self.embedding(dec_input)
 
         dec_input = tf.concat([tf.expand_dims(context_vec, 1), dec_input], axis=-1)
-        # inputs shape is (batch_size, 1, embedding_dim + states_size)
+        # dec_input shape is (batch_size, 1, embedding_dim + state_size)
 
         tup = self.gru(dec_input)
 
